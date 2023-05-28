@@ -153,7 +153,9 @@ public:
 
 Merger::Merger(const std::vector<ConstArray<Record>> &parts,
                bool ask_for_refills, const std::vector<Key> &boundaries)
-    : impl_(std::make_unique<Impl>(parts, ask_for_refills, boundaries)) {}
+    : impl_(new Impl(parts, ask_for_refills, boundaries)) {}
+
+Merger::~Merger() {delete impl_;}
 
 GetBatchRetVal Merger::GetBatch(Record *const &ret, size_t max_num_records) {
   return impl_->GetBatch(ret, max_num_records);

@@ -85,6 +85,8 @@ public:
   Merger(const std::vector<ConstArray<Record>> &partitions,
          bool ask_for_refills, const std::vector<Key> &boundaries);
 
+  ~Merger();
+
   // Returns (count, part_id) where
   // - count is the actual number of records written into `ret`, and
   // - part_id is the partition that has been depleted (-1 if none).
@@ -94,7 +96,7 @@ public:
 
 private:
   class Impl;
-  std::unique_ptr<Impl> impl_;
+  Impl* impl_;
 };
 
 // A functional version of Merger that handles memory allocation.
