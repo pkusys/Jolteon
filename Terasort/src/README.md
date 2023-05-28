@@ -60,5 +60,5 @@ aws lambda create-function \
 ```
 aws lambda update-function-code \
     --function-name terasort-1 \
-    --zip-file fileb:/main.zip
+    --zip-file fileb://main.zip
 ```
