@@ -4,6 +4,7 @@
 sudo apt-get update
 sudo apt-get install -y libcurl4-openssl-dev libssl-dev uuid-dev zlib1g-dev libpulse-dev
 sudo apt install -y cmake build-essential libssl-dev pkg-config
+sudo apt-get install -y zlib1g-dev
 sudo apt install -y awscli
 # assume that cmake has been installed
 ```

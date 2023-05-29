@@ -6,6 +6,7 @@ add_library(sortlib csortlib.cpp)
 
 find_package(aws-lambda-runtime REQUIRED)
 find_package(AWSSDK COMPONENTS s3)
+find_package(ZLIB)
 add_executable(${PROJECT_NAME} "main.cpp")
 target_link_libraries(${PROJECT_NAME} PUBLIC
                       AWS::aws-lambda-runtime
