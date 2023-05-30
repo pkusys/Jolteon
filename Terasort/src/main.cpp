@@ -1,30 +1,7 @@
-#include <cassert>
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <vector>
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <aws/core/Aws.h>
-#include <aws/core/utils/logging/LogLevel.h>
-#include <aws/core/utils/logging/ConsoleLogSystem.h>
-#include <aws/core/utils/logging/LogMacros.h>
-#include <aws/core/utils/json/JsonSerializer.h>
-#include <aws/core/utils/HashingUtils.h>
-#include <aws/core/platform/Environment.h>
-#include <aws/core/client/ClientConfiguration.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/s3/S3Client.h>
-#include <aws/s3/model/GetObjectRequest.h>
-#include <aws/s3/model/PutObjectRequest.h>
-#include <aws/lambda-runtime/runtime.h>
-#include <iostream>
-#include <memory>
-
 #include <aws/lambda-runtime/runtime.h>
 
 #include "csortlib.h"
+#include "io.h"
 
 using namespace csortlib;
 
@@ -57,19 +34,7 @@ MakeConstRecordArrays(Record *const records,
 }
 
 
-std::string download_file(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String& output);
-
-std::string upload_file(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String const& body);
-
-std::string read_to_string(Aws::IOStream& stream, Aws::String& output);
+// std::string read_to_string(Aws::IOStream& stream, Aws::String& output);
 char const TAG[] = "LAMBDA_ALLOC";
 
 invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client const& client)
@@ -83,144 +48,118 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
 
   auto v = json.View();
 
-  if (!v.ValueExists("s3bucket") || !v.ValueExists("s3key") || !v.GetObject("s3bucket").IsString() ||
-      !v.GetObject("s3key").IsString()) {
-      return invocation_response::failure("Missing input value s3bucket or s3key", "InvalidJSON");
+  // Get s3 info
+  // input data bucket/key
+  if (!v.ValueExists("s3bucket_in") || !v.ValueExists("s3key_in") || !v.GetObject("s3bucket_in").IsString() ||
+      !v.GetObject("s3key_in").IsString()) {
+      return invocation_response::failure("Missing input value s3bucket_in or s3key_in", "InvalidJSON");
+  }
+  auto bucket_in = v.GetString("s3bucket_in");
+  auto key_in = v.GetString("s3key_in");
+  // output data bucket/key
+  if (!v.ValueExists("s3bucket_out") || !v.ValueExists("s3key_out") || !v.GetObject("s3bucket_out").IsString() ||
+      !v.GetObject("s3key_out").IsString()) {
+      return invocation_response::failure("Missing input value s3bucket_out or s3key_out", "InvalidJSON");
+  }
+  auto bucket_out = v.GetString("s3bucket_out");
+  auto key_out = v.GetString("s3key_out");
+
+  // Get func_type
+  if (!v.ValueExists("func_type") || !v.GetObject("func_type").IsString()) {
+      return invocation_response::failure("Missing input value func_type", "InvalidJSON");
+  }
+  auto func_type = v.GetString("func_type");
+  if (func_type != "map" && func_type != "reduce") {
+      return invocation_response::failure("Invalid func_type", "InvalidJSON");
   }
 
-  auto bucket = v.GetString("s3bucket");
-  auto key = v.GetString("s3key");
+  // Get number of map tasks and number of reduce tasks
+  if (!v.ValueExists("num_mappers") || !v.ValueExists("num_reducers") ||
+      !v.GetObject("num_mappers").IsIntegerType() || !v.GetObject("num_reducers").IsIntegerType()) {
+      return invocation_response::failure("Missing input value num_mappers or num_reducers", "InvalidJSON");
+  }
+  const size_t num_mappers = v.GetInteger("num_map");
+  const size_t num_reducers = v.GetInteger("num_reduce");
 
-  AWS_LOGSTREAM_INFO(TAG, "Attempting to download file from s3://" << bucket << "/" << key);
+  // Get task id and number of partitions of raw input data
+  if (!v.ValueExists("task_id") || !v.ValueExists("num_partitions") ||
+      !v.GetObject("task_id").IsIntegerType() || !v.GetObject("num_partitions").IsIntegerType()) {
+      return invocation_response::failure("Missing input value task_id or num_partitions", "InvalidJSON");
+  }
+  const size_t task_id = v.GetInteger("task_id");
+  const size_t num_partitions = v.GetInteger("num_partitions");
 
-  Aws::String rec_string;
-  auto err = download_file(client, bucket, key, rec_string);
-  if (!err.empty()) {
-      return invocation_response::failure(err, "DownloadFailure");
+  if (num_mappers == 0 || num_reducers == 0 || num_partitions == 0) {
+      return invocation_response::failure("Zero value of num_mappers or num_reducers or num_partitions", "InvalidJSON");
   }
 
-  const size_t num_reducers = 10;
-  const auto &boundaries = GetBoundaries(num_reducers);
+  if (func_type == "map") {
+      // Compute which partitions to process
+      size_t parts_per_task = num_partitions / num_mappers;
+      size_t remainder = num_partitions % num_mappers;
+      size_t start = 0, end = 0;
+      if (task_id < remainder) {
+          start = task_id * (parts_per_task + 1);
+          end = start + parts_per_task + 1;
+      } else {
+          start = remainder * (parts_per_task + 1) + (task_id - remainder) * parts_per_task;
+          end = start + parts_per_task;
+      }
 
-  std::vector<std::string> files;
+      // Download records from s3, all append to record_bytes
+      ByteVec record_bytes;
+      for (size_t i = start; i < end; i++) {
+          Aws::String part_key = key_in + "_" + std::to_string(start + i);
+          auto err = download_file_binary(client, bucket_in, part_key, record_bytes);
+          if (!err.empty()) {
+              return invocation_response::failure(err, "DownloadFailure");
+          }
+      }
 
-  // Read number from files, s3 read
-  size_t num_records = rec_string.size() / HEADER_SIZE;
+      // Sort and partition
+      const auto &boundaries = GetBoundaries(num_reducers);
+      
+      size_t num_records = record_bytes.size() / HEADER_SIZE;
+      Record *records = new Record[num_records];
+      for (size_t i = 0; i < num_records; i++){
+          uint8_t *p = (uint8_t *)(records + i);
+          memcpy(p, record_bytes.data() + i * HEADER_SIZE, HEADER_SIZE);
+      }
 
-  Record *records = new Record[num_records];
+      auto ret = SortAndPartition({records, num_records}, boundaries);
+      // for (size_t i = 0; i < ret.size(); i++){
+      //   printf("%ld %ld\n", ret[i].offset, ret[i].size);
+      // }
 
-  for (int i = 0; i < num_records; i++){
-    uint8_t *p = (uint8_t *)(records + i);
-    memcpy(p, rec_string.c_str() + i * HEADER_SIZE, HEADER_SIZE);
+      const auto &record_arrays = MakeConstRecordArrays(records, ret);
+      for (size_t i = 0; i < record_arrays.size(); ++i) {
+          const auto &partition = record_arrays[i];
+          Aws::String part_key = key_out + "_map" + std::to_string(task_id) + "_part" + std::to_string(i);
+          ByteVec part_data; 
+          // Convert partition to string
+          ConvertRecordArrayToBinary(partition, part_data);
+          auto err = upload_file_binary(client, bucket_out, part_key, part_data); 
+          if (!err.empty()) {
+              return invocation_response::failure(err, "UploadFailure");
+        }
+      }
+  } else {
+      // TODO: read partitions from s3
+      // const auto& record_arrays = MakeConstRecordArrays(records, ret);
+      // const auto output = MergePartitions(record_arrays);
+
+      // FILE* fout;
+      // fout = fopen("data1g-output", "w");
+      // if (fout == NULL) {
+      //     perror("Failed to open file");
+      // } else {
+      //     size_t writecount = fwrite(output.ptr, RECORD_SIZE, output.size, fout);
+      //     printf("Wrote %lu bytes.\n", writecount);
+      //     fclose(fout);
+      // }
   }
-
-  auto ret = SortAndPartition({records, num_records}, boundaries);
-
-  // for (size_t i = 0; i < ret.size(); i++){
-  //   printf("%ld %ld\n", ret[i].offset, ret[i].size);
-  // }
-
-
-
-  const auto& record_arrays = MakeConstRecordArrays(records, ret);
-  const auto output = MergePartitions(record_arrays);
-
-  // FILE* fout;
-  // fout = fopen("data1g-output", "w");
-  // if (fout == NULL) {
-  //     perror("Failed to open file");
-  // } else {
-  //     size_t writecount = fwrite(output.ptr, RECORD_SIZE, output.size, fout);
-  //     printf("Wrote %lu bytes.\n", writecount);
-  //     fclose(fout);
-  // }
-
 
   return invocation_response::success("Hello, World!", "application/json");
-}
-
-std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetConsoleLoggerFactory()
-{
-    return [] {
-        return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>(
-            "console_logger", Aws::Utils::Logging::LogLevel::Trace);
-    };
-}
-
-std::string upload_file(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String const& body)
-{
-    using namespace Aws;
-
-    Aws::S3::Model::PutObjectRequest request;
-    request.SetBucket(bucket);
-    request.SetKey(key);
-    std::shared_ptr<Aws::IOStream> bodyStream = 
-        Aws::MakeShared<Aws::StringStream>("PutObjectInputStream");
-    *bodyStream << body;
-    request.SetBody(bodyStream);
-
-    auto outcome = client.PutObject(request);
-    if (outcome.IsSuccess()) {
-        AWS_LOGSTREAM_INFO(TAG, "Upload completed!");
-        return {};
-    }
-    else {
-        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
-        return outcome.GetError().GetMessage();
-    }
-}
-
-std::string read_to_string(Aws::IOStream& stream, Aws::String& output)
-{
-    Aws::Vector<unsigned char> bits;
-    bits.reserve(stream.tellp());
-    stream.seekg(0, stream.beg);
-
-    char streamBuffer[1024 * 4];
-    while (stream.good()) {
-        stream.read(streamBuffer, sizeof(streamBuffer));
-        auto bytesRead = stream.gcount();
-
-        if (bytesRead > 0) {
-            bits.insert(bits.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
-        }
-    }
-    // Aws::Utils::ByteBuffer bb(bits.data(), bits.size());
-    // output = Aws::Utils::HashingUtils::Base64Encode(bb);
-    output = Aws::String((char *)bits.data(), bits.size());
-    return {};
-}
-
-std::string write_to_binary(Aws::IOStream& stream, Aws::String& input) {
-    stream.write(input.c_str(), input.size());
-    return {};
-}
-
-std::string download_file(
-    Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key,
-    Aws::String& output)
-{
-    using namespace Aws;
-
-    S3::Model::GetObjectRequest request;
-    request.WithBucket(bucket).WithKey(key);
-
-    auto outcome = client.GetObject(request);
-    if (outcome.IsSuccess()) {
-        AWS_LOGSTREAM_INFO(TAG, "Download completed!");
-        auto& s = outcome.GetResult().GetBody();
-        return read_to_string(s, output);
-    }
-    else {
-        AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
-        return outcome.GetError().GetMessage();
-    }
 }
 
 int main(int argc, char* argv[]) {
@@ -239,28 +178,12 @@ int main(int argc, char* argv[]) {
     // S3::S3Client client(credentialsProvider, config);
     S3::S3Client client;
 
-    // auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
-    //     return my_handler(req, client);
-    // };
-    //run_handler(handler_fn);
+    auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
+        return my_handler(req, client);
+    };
+    run_handler(handler_fn);
 
-    std::ifstream fin;
-	fin.open("../part1", std::ios::in | std::ios::binary);
-	Aws::String p1;
-	fin.seekg(0, std::ios::end);
-	p1.reserve(fin.tellg());
-	fin.seekg(0, std::ios::beg);
-	p1.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-	fin.close();
-	auto err0 = upload_file(client, "serverless-bound", "p1", p1);
-
-	Aws::String part1;
-	auto err = download_file(client, "serverless-bound", "p1", part1);
-	// write to local file
-	std::ofstream fout;
-	fout.open("part1-download", std::ios::out | std::ios::binary);
-	fout << part1;
-	fout.close();
+    // test_s3_io(client, "serverless-bound", "p1");
   }
   ShutdownAPI(options);
   return 0;

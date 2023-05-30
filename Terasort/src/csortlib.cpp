@@ -85,7 +85,7 @@ struct SortDataComparator {
 
 class Merger::Impl {
 public:
-  std::vector<ConstArray<Record>> parts_;
+  std::vector<ConstArray<Record> > parts_;
   std::priority_queue<SortData, std::vector<SortData>, SortDataComparator>
       heap_;
   bool ask_for_refills_;
@@ -149,7 +149,7 @@ public:
     }
     return std::make_pair(cnt, -1);
   }
-}; // namespace csortlib
+}; 
 
 Merger::Merger(const std::vector<ConstArray<Record>> &parts,
                bool ask_for_refills, const std::vector<Key> &boundaries)
