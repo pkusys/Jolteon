@@ -38,7 +38,7 @@ std::string upload_file_string(
 std::string read_to_string(Aws::IOStream& stream, Aws::String& output)
 {
     Aws::Vector<unsigned char> bytes;
-    bytes.reserve(stream.tellp());
+    bytes.reserve(bytes.size() + stream.tellp());
     stream.seekg(0, stream.beg);
 
     char streamBuffer[1024 * 4];
@@ -113,7 +113,7 @@ std::string read_to_binary(Aws::IOStream& stream, ByteVec& output)
 {
     // append to output
     char streamBuffer[1024 * 4];
-    output.reserve(stream.tellp());
+    output.reserve(output.size() + stream.tellp());
     stream.seekg(0, stream.beg);
 
     while (stream.good()) {
@@ -166,16 +166,16 @@ void test_s3io_bin(Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key) {
     
-    std::ifstream fin;
-	fin.open("part1", std::ios::in | std::ios::binary);
-	ByteVec p1;
-    fin.seekg(0, fin.end);
-    auto size = fin.tellg();
-    fin.seekg(0, fin.beg);
-    p1.resize(size);
-    fin.read((char *)p1.data(), size);
-	fin.close();
-	auto err0 = upload_file_binary(client, bucket, key, p1);
+    // std::ifstream fin;
+	// fin.open("part1", std::ios::in | std::ios::binary);
+	// ByteVec p1;
+    // fin.seekg(0, fin.end);
+    // auto size = fin.tellg();
+    // fin.seekg(0, fin.beg);
+    // p1.resize(size);
+    // fin.read((char *)p1.data(), size);
+	// fin.close();
+	// auto err0 = upload_file_binary(client, bucket, key, p1);
 
 	ByteVec part1;
 	auto err = download_file_binary(client, bucket, key, part1);

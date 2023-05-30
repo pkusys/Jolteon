@@ -21,6 +21,8 @@ make && make install
 cd -
 ```
 ## Install AWS SDK for C++
+Refer to [stackoverflow](https://stackoverflow.com/questions/74516483/aws-c-lambda-segmentation-fault/74611780#74611780) and modify some files to
+avoid s2n init error.
 ```
 cd ~
 git clone --recurse-submodules https://github.com/aws/aws-sdk-cpp

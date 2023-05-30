@@ -54,6 +54,10 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       !v.GetObject("s3key_in").IsString()) {
       return invocation_response::failure("Missing input value s3bucket_in or s3key_in", "InvalidJSON");
   }
+  // std::string res = std::to_string(v.ValueExists("s3bucket_in")) + "_" + 
+  //     std::to_string(v.ValueExists("s3key_in")) + "_" + 
+  //     std::to_string(v.GetObject("s3bucket_in").IsString()) + "_" + 
+  //     std::to_string(v.GetObject("s3key_in").IsString());
   auto bucket_in = v.GetString("s3bucket_in");
   auto key_in = v.GetString("s3key_in");
   // output data bucket/key
@@ -78,8 +82,8 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       !v.GetObject("num_mappers").IsIntegerType() || !v.GetObject("num_reducers").IsIntegerType()) {
       return invocation_response::failure("Missing input value num_mappers or num_reducers", "InvalidJSON");
   }
-  const size_t num_mappers = v.GetInteger("num_map");
-  const size_t num_reducers = v.GetInteger("num_reduce");
+  const size_t num_mappers = v.GetInteger("num_mappers");
+  const size_t num_reducers = v.GetInteger("num_reducers");
 
   // Get task id and number of partitions of raw input data
   if (!v.ValueExists("task_id") || !v.ValueExists("num_partitions") ||
@@ -109,7 +113,7 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       // Download records from s3, all append to record_bytes
       ByteVec record_bytes;
       for (size_t i = start; i < end; i++) {
-          Aws::String part_key = key_in + "_" + std::to_string(start + i);
+          Aws::String part_key = key_in + "_" + std::to_string(i);
           auto err = download_file_binary(client, bucket_in, part_key, record_bytes);
           if (!err.empty()) {
               return invocation_response::failure(err, "DownloadFailure");
@@ -122,6 +126,11 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       size_t num_records = record_bytes.size() / RECORD_SIZE;
       Record *records = new Record[num_records];
       memcpy((uint8_t *)records, record_bytes.data(), num_records * RECORD_SIZE);
+
+      // Free memory
+      {
+        ByteVec().swap(record_bytes);
+      }
 
       auto ret = SortAndPartition({records, num_records}, boundaries);
       // for (size_t i = 0; i < ret.size(); i++){
@@ -158,13 +167,18 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
           }
 
           auto num_records = (record_bytes.size() - num_bytes) / RECORD_SIZE;
-          num_bytes = record_bytes.size();
           auto offset = num_bytes / RECORD_SIZE;
+          num_bytes = record_bytes.size();
           partitions.emplace_back(Partition{offset, num_records});
       }
 
       Record *records = new Record[num_bytes / RECORD_SIZE];
       memcpy((uint8_t *)records, record_bytes.data(), num_bytes);
+
+      // Free memory
+      {
+        ByteVec().swap(record_bytes);
+      }
 
       // Merge partitions with sort
       const auto record_arrays = MakeConstRecordArrays(records, partitions);
@@ -179,20 +193,11 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
           return invocation_response::failure(err, "UploadFailure");
       }
 
-      // FILE* fout;
-      // fout = fopen("data1g-output", "w");
-      // if (fout == NULL) {
-      //     perror("Failed to open file");
-      // } else {
-      //     size_t writecount = fwrite(output.ptr, RECORD_SIZE, output.size, fout);
-      //     printf("Wrote %lu bytes.\n", writecount);
-      //     fclose(fout);
-      // }
-
       delete[] records;
   }
 
-  return invocation_response::success("Hello, World!", "application/json");
+  return invocation_response::success("Terasort " + func_type + " id: " + std::to_string(task_id) + 
+      "/(" + std::to_string(num_mappers) + ", " + std::to_string(num_reducers) + ")", "application/json");
 }
 
 int main(int argc, char* argv[]) {
@@ -203,20 +208,20 @@ int main(int argc, char* argv[]) {
 //   options.loggingOptions.logger_create_fn = GetConsoleLoggerFactory();
   InitAPI(options);
   {
-    // Client::ClientConfiguration config;
-    // config.region = Aws::Environment::GetEnv("AWS_REGION");
-    // config.caFile = "/etc/pki/tls/certs/ca-bundle.crt";
+    Client::ClientConfiguration config;
+    config.region = "us-east-1";
+    config.caFile = "/etc/pki/tls/certs/ca-bundle.crt";
 
     // auto credentialsProvider = Aws::MakeShared<Aws::Auth::EnvironmentAWSCredentialsProvider>(TAG);
     // S3::S3Client client(credentialsProvider, config);
-    S3::S3Client client;
+    S3::S3Client client(config);
 
     auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
         return my_handler(req, client);
     };
     run_handler(handler_fn);
 
-    // test_s3io_bin(client, "serverless-bound", "p1");
+    // test_s3io_bin(client, "serverless-bound", "terasort/test/test-32m_0");
   }
   ShutdownAPI(options);
   return 0;
