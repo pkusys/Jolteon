@@ -156,18 +156,19 @@ void ConvertRecordArrayToBinary(
 void test_s3_io(Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key) {
-    std::ifstream fin;
-	fin.open("../part1", std::ios::in | std::ios::binary);
-	Aws::String p1;
-	fin.seekg(0, std::ios::end);
-	p1.reserve(fin.tellg());
-	fin.seekg(0, std::ios::beg);
-	p1.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-	fin.close();
-	auto err0 = upload_file_string(client, bucket, key, p1);
+    
+    // std::ifstream fin;
+	// fin.open("../part1", std::ios::in | std::ios::binary);
+	// Aws::String p1;
+	// fin.seekg(0, std::ios::end);
+	// p1.reserve(fin.tellg());
+	// fin.seekg(0, std::ios::beg);
+	// p1.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
+	// fin.close();
+	// auto err0 = upload_file_string(client, bucket, key, p1);
 
 	Aws::String part1;
-	auto err = download_file_string(client, bucket, key, part1);
+	auto err = download_file_binary(client, bucket, key, part1);
 	// write to local file
 	std::ofstream fout;
 	fout.open("part1-download", std::ios::out | std::ios::binary);

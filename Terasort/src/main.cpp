@@ -119,12 +119,9 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       // Sort and partition
       const auto &boundaries = GetBoundaries(num_reducers);
       
-      size_t num_records = record_bytes.size() / HEADER_SIZE;
+      size_t num_records = record_bytes.size() / RECORD_SIZE;
       Record *records = new Record[num_records];
-      for (size_t i = 0; i < num_records; i++){
-          uint8_t *p = (uint8_t *)(records + i);
-          memcpy(p, record_bytes.data() + i * HEADER_SIZE, HEADER_SIZE);
-      }
+      memcpy((uint8_t *)records, record_bytes.data(), num_records * RECORD_SIZE);
 
       auto ret = SortAndPartition({records, num_records}, boundaries);
       // for (size_t i = 0; i < ret.size(); i++){
@@ -178,12 +175,12 @@ int main(int argc, char* argv[]) {
     // S3::S3Client client(credentialsProvider, config);
     S3::S3Client client;
 
-    auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
-        return my_handler(req, client);
-    };
-    run_handler(handler_fn);
+    // auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
+    //     return my_handler(req, client);
+    // };
+    // run_handler(handler_fn);
 
-    // test_s3_io(client, "serverless-bound", "p1");
+    test_s3io_bin(client, "serverless-bound", "p1");
   }
   ShutdownAPI(options);
   return 0;
