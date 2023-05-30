@@ -113,6 +113,9 @@ std::string read_to_binary(Aws::IOStream& stream, ByteVec& output)
 {
     // append to output
     char streamBuffer[1024 * 4];
+    output.reserve(stream.tellp());
+    stream.seekg(0, stream.beg);
+
     while (stream.good()) {
         stream.read(streamBuffer, sizeof(streamBuffer));
         auto bytesRead = stream.gcount();
@@ -147,31 +150,41 @@ std::string download_file_binary(
 
 void ConvertRecordArrayToBinary(
     const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output) {
-    for (size_t i = 0; i < record_array.size; ++i) {
-        auto record = record_array.ptr + i;
-        output.insert(output.end(), (const unsigned char *)record, (const unsigned char *)record + csortlib::RECORD_SIZE);
-    }
+    size_t byte_size = record_array.size * csortlib::RECORD_SIZE;
+    output.resize(byte_size);
+    memcpy(output.data(), (const unsigned char *)record_array.ptr, byte_size);
 }
 
-void test_s3_io(Aws::S3::S3Client const& client,
+void ConvertRecordArrayToBinary(
+    const csortlib::Array<csortlib::Record> &record_array, ByteVec &output) {
+    size_t byte_size = record_array.size * csortlib::RECORD_SIZE;
+    output.resize(byte_size);
+    memcpy(output.data(), (unsigned char *)record_array.ptr, byte_size);
+}
+
+void test_s3io_bin(Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key) {
     
-    // std::ifstream fin;
-	// fin.open("../part1", std::ios::in | std::ios::binary);
-	// Aws::String p1;
-	// fin.seekg(0, std::ios::end);
-	// p1.reserve(fin.tellg());
-	// fin.seekg(0, std::ios::beg);
-	// p1.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-	// fin.close();
-	// auto err0 = upload_file_string(client, bucket, key, p1);
+    std::ifstream fin;
+	fin.open("part1", std::ios::in | std::ios::binary);
+	ByteVec p1;
+    fin.seekg(0, fin.end);
+    auto size = fin.tellg();
+    fin.seekg(0, fin.beg);
+    p1.resize(size);
+    fin.read((char *)p1.data(), size);
+	fin.close();
+	auto err0 = upload_file_binary(client, bucket, key, p1);
 
-	Aws::String part1;
+	ByteVec part1;
 	auto err = download_file_binary(client, bucket, key, part1);
-	// write to local file
+    std::cout << "download_size: " << part1.size() << std::endl;
+	
 	std::ofstream fout;
 	fout.open("part1-download", std::ios::out | std::ios::binary);
-	fout << part1;
+	for (auto &b : part1) {
+        fout << b;
+    }
 	fout.close();
 }

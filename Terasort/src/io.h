@@ -60,8 +60,9 @@ std::string upload_file_binary(
 
 /* Convert a sorted record array to a std::vector<unsigned char> */
 void ConvertRecordArrayToBinary(const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output);
+void ConvertRecordArrayToBinary(const csortlib::Array<csortlib::Record> &record_array, ByteVec &output);
 
-void test_s3_io(Aws::S3::S3Client const& client,
+void test_s3io_bin(Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key);
 

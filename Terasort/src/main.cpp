@@ -128,6 +128,7 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       //   printf("%ld %ld\n", ret[i].offset, ret[i].size);
       // }
 
+      // Upload partitions to s3
       const auto &record_arrays = MakeConstRecordArrays(records, ret);
       for (size_t i = 0; i < record_arrays.size(); ++i) {
           const auto &partition = record_arrays[i];
@@ -140,10 +141,43 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
               return invocation_response::failure(err, "UploadFailure");
         }
       }
+
+      delete[] records;
   } else {
-      // TODO: read partitions from s3
-      // const auto& record_arrays = MakeConstRecordArrays(records, ret);
-      // const auto output = MergePartitions(record_arrays);
+      // Download all partitions belonging to this reducer from s3
+      ByteVec record_bytes;
+      std::vector<Partition> partitions;
+      partitions.reserve(num_mappers);
+      
+      size_t num_bytes = 0;
+      for (size_t i = 0; i < num_mappers; i++) {
+          Aws::String part_key = key_in + "_map" + std::to_string(i) + "_part" + std::to_string(task_id);
+          auto err = download_file_binary(client, bucket_in, part_key, record_bytes);
+          if (!err.empty()) {
+              return invocation_response::failure(err, "DownloadFailure");
+          }
+
+          auto num_records = (record_bytes.size() - num_bytes) / RECORD_SIZE;
+          num_bytes = record_bytes.size();
+          auto offset = num_bytes / RECORD_SIZE;
+          partitions.emplace_back(Partition{offset, num_records});
+      }
+
+      Record *records = new Record[num_bytes / RECORD_SIZE];
+      memcpy((uint8_t *)records, record_bytes.data(), num_bytes);
+
+      // Merge partitions with sort
+      const auto record_arrays = MakeConstRecordArrays(records, partitions);
+      const auto result = MergePartitions(record_arrays);
+
+      // Upload result to s3
+      Aws::String res_key = key_out + "_reduce" + std::to_string(task_id);
+      ByteVec result_bytes;
+      ConvertRecordArrayToBinary(result, result_bytes);
+      auto err = upload_file_binary(client, bucket_out, res_key, result_bytes);
+      if (!err.empty()) {
+          return invocation_response::failure(err, "UploadFailure");
+      }
 
       // FILE* fout;
       // fout = fopen("data1g-output", "w");
@@ -154,6 +188,8 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
       //     printf("Wrote %lu bytes.\n", writecount);
       //     fclose(fout);
       // }
+
+      delete[] records;
   }
 
   return invocation_response::success("Hello, World!", "application/json");
@@ -175,12 +211,12 @@ int main(int argc, char* argv[]) {
     // S3::S3Client client(credentialsProvider, config);
     S3::S3Client client;
 
-    // auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
-    //     return my_handler(req, client);
-    // };
-    // run_handler(handler_fn);
+    auto handler_fn = [&client](aws::lambda_runtime::invocation_request const& req) {
+        return my_handler(req, client);
+    };
+    run_handler(handler_fn);
 
-    test_s3io_bin(client, "serverless-bound", "p1");
+    // test_s3io_bin(client, "serverless-bound", "p1");
   }
   ShutdownAPI(options);
   return 0;
