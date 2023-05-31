@@ -161,24 +161,24 @@ void test_s3io_bin(Aws::S3::S3Client const& client,
     Aws::String const& key) {
     
     // std::ifstream fin;
-	// fin.open("part1", std::ios::in | std::ios::binary);
-	// ByteVec p1;
+    // fin.open("part1", std::ios::in | std::ios::binary);
+    // ByteVec p1;
     // fin.seekg(0, fin.end);
     // auto size = fin.tellg();
     // fin.seekg(0, fin.beg);
     // p1.resize(size);
     // fin.read((char *)p1.data(), size);
-	// fin.close();
-	// auto err0 = upload_file_binary(client, bucket, key, p1); 
+    // fin.close();
+    // auto err0 = upload_file_binary(client, bucket, key, p1); 
 
-	ByteVec part1;
-	auto err = download_file_binary(client, bucket, key, part1);
+    ByteVec part1;
+    auto err = download_file_binary(client, bucket, key, part1);
     std::cout << "download_size: " << part1.size() << std::endl;
-	
-	std::ofstream fout;
-	fout.open("part1-download", std::ios::out | std::ios::binary);
-	for (auto &b : part1) {
+        
+    std::ofstream fout;
+    fout.open("part1-download", std::ios::out | std::ios::binary);
+    for (auto &b : part1) {
         fout << b;
     }
-	fout.close();
+    fout.close();
 }

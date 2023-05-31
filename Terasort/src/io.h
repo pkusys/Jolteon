@@ -9,7 +9,6 @@
 #include <iostream>
 #include <memory>
 #include <cassert>
-#include <chrono>
 
 #include <aws/core/Aws.h>
 #include <aws/core/utils/logging/LogLevel.h>

@@ -1,4 +1,5 @@
 #include <aws/lambda-runtime/runtime.h>
+#include <chrono>
 
 #include "csortlib.h"
 #include "io.h"
@@ -6,6 +7,23 @@
 using namespace csortlib;
 
 using namespace aws::lambda_runtime;
+
+/* Get current time */
+std::chrono::high_resolution_clock::time_point get_time() {
+    return std::chrono::high_resolution_clock::now();
+}
+
+/* Get time duration in milliseconds */
+long get_time_duration_ms(std::chrono::high_resolution_clock::time_point start, 
+                       std::chrono::high_resolution_clock::time_point end) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+}
+
+/* Get time duration in microseconds */
+long get_time_duration_us(std::chrono::high_resolution_clock::time_point start, 
+                       std::chrono::high_resolution_clock::time_point end) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+}
 
 void PrintRecord(const Record &rec) {
     for (size_t i = 0; i < HEADER_SIZE; ++i) {
@@ -39,6 +57,7 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
     using namespace Aws::Utils::Json;
 
     // Parse input JSON
+    auto start_time = get_time();
     JsonValue json(req.payload);
     if (!json.WasParseSuccessful()) {
         return invocation_response::failure("Failed to parse input JSON", "InvalidJSON");
@@ -98,7 +117,16 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
             "Zero value of num_mappers or num_reducers or num_partitions", "InvalidJSON");
     }
 
+    auto end_time = get_time();
+    auto parse_duration = get_time_duration_ms(start_time, end_time);
+
+    long read_duration = 0;
+    long records_creation_duration = 0;
+    long sort_duration = 0;
+    long write_duration = 0;
+
     if (func_type == "map") {
+        start_time = get_time();
         // Compute which partitions to process
         size_t parts_per_task = num_partitions / num_mappers;
         size_t remainder = num_partitions % num_mappers;
@@ -120,22 +148,32 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
                 return invocation_response::failure(err, "DownloadFailure");
             }
         }
+        end_time = get_time();
+        read_duration = get_time_duration_ms(start_time, end_time);
 
-        // Sort and partition
-        const auto &boundaries = GetBoundaries(num_reducers);
-        
+        // Create records from record_bytes
+        start_time = get_time();
         size_t num_records = record_bytes.size() / RECORD_SIZE;
         Record *records = new Record[num_records];
         memcpy((uint8_t *)records, record_bytes.data(), num_records * RECORD_SIZE);
-
         // Free memory
         {
             ByteVec().swap(record_bytes);
         }
+        end_time = get_time();
+        records_creation_duration = get_time_duration_ms(start_time, end_time);
 
+        // Sort and partition
+        start_time = get_time();
+
+        const auto &boundaries = GetBoundaries(num_reducers);
         auto ret = SortAndPartition({records, num_records}, boundaries);
 
+        end_time = get_time();
+        sort_duration = get_time_duration_ms(start_time, end_time);
+
         // Upload partitions to s3
+        start_time = get_time();
         const auto &record_arrays = MakeConstRecordArrays(records, ret);
         for (size_t i = 0; i < record_arrays.size(); ++i) {
             const auto &partition = record_arrays[i];
@@ -149,9 +187,12 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
                 return invocation_response::failure(err, "UploadFailure");
             }
         }
+        end_time = get_time();
+        write_duration = get_time_duration_ms(start_time, end_time);
 
         delete[] records;
     } else {
+        start_time = get_time();
         // Download all partitions belonging to this reducer from s3
         ByteVec record_bytes;
         std::vector<Partition> partitions;
@@ -171,20 +212,31 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
             num_bytes = record_bytes.size();
             partitions.emplace_back(Partition{offset, num_records});
         }
+        end_time = get_time();
+        read_duration = get_time_duration_ms(start_time, end_time);
 
+        // Create records from record_bytes
+        start_time = get_time();
         Record *records = new Record[num_bytes / RECORD_SIZE];
         memcpy((uint8_t *)records, record_bytes.data(), num_bytes);
-
         // Free memory
         {
             ByteVec().swap(record_bytes);
         }
+        end_time = get_time();
+        records_creation_duration = get_time_duration_ms(start_time, end_time);
 
         // Merge partitions with sort
+        start_time = get_time();
+
         const auto record_arrays = MakeConstRecordArrays(records, partitions);
         const auto result = MergePartitions(record_arrays);
 
+        end_time = get_time();
+        sort_duration = get_time_duration_ms(start_time, end_time);
+
         // Upload the result to s3
+        start_time = get_time();
         Aws::String res_key = key_out + "_reduce" + std::to_string(task_id);
         ByteVec result_bytes;
         ConvertRecordArrayToBinary(result, result_bytes);
@@ -192,14 +244,22 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
         if (!err.empty()) {
             return invocation_response::failure(err, "UploadFailure");
         }
+        end_time = get_time();
+        write_duration = get_time_duration_ms(start_time, end_time);
 
         delete[] records;
     }
 
-    return invocation_response::success("Terasort " + func_type + 
-                                        " id: " + std::to_string(task_id) + 
-                                        "/(" + std::to_string(num_mappers) + ", " + 
-                                        std::to_string(num_reducers) + ")", "application/json");
+    return invocation_response::success("Terasort " + func_type + " task,"
+                                        " id " + std::to_string(task_id) + " ,"
+                                        " num_mappers " + std::to_string(num_mappers) + " ," + 
+                                        " num_reducers " + std::to_string(num_reducers) + " /" +
+                                        " parse_duration " + std::to_string(parse_duration) + " ms," + 
+                                        " read_duration " + std::to_string(read_duration) + " ms," + 
+                                        " record_creation_duration " + std::to_string(records_creation_duration) + " ms," + 
+                                        " sort_duration " + std::to_string(sort_duration) + " ms," + 
+                                        " write_duration " + std::to_string(write_duration) + " ms", 
+                                        "application/json");
 }
 
 int main(int argc, char* argv[]) {
@@ -207,6 +267,9 @@ int main(int argc, char* argv[]) {
 
     SDKOptions options;
     options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Info;
+    // Do not ignore SIGPIPE in AWS SDK C++
+    // Refer to https://repost.aws/questions/QUq-v7qLPmTli8ExAZ-16Iaw/cognito-c-sdk-broken-pipe
+    options.httpOptions.installSigPipeHandler = true;
     // options.loggingOptions.logger_create_fn = GetConsoleLoggerFactory();
     InitAPI(options);
     {
