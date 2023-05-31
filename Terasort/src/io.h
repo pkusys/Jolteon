@@ -28,7 +28,8 @@
 
 typedef std::vector<unsigned char> ByteVec;
 
-std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetConsoleLoggerFactory();
+std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> 
+GetConsoleLoggerFactory();
 
 std::string download_file_string(
     Aws::S3::S3Client const& client,
@@ -54,16 +55,13 @@ std::string upload_file_binary(
     Aws::String const& key,
     ByteVec const& body);
 
-/* Convert a sorted record array to an Aws::String */
-// void ConvertRecordArrayToString(
-//     const csortlib::ConstArray<Record> &record_array, Aws::String &output);
-
 /* Convert a sorted record array to a std::vector<unsigned char> */
-void ConvertRecordArrayToBinary(const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output);
-void ConvertRecordArrayToBinary(const csortlib::Array<csortlib::Record> &record_array, ByteVec &output);
+void ConvertRecordArrayToBinary(
+    const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output);
+void ConvertRecordArrayToBinary(
+    const csortlib::Array<csortlib::Record> &record_array, ByteVec &output);
 
-void test_s3io_bin(Aws::S3::S3Client const& client,
-    Aws::String const& bucket,
-    Aws::String const& key);
+void test_s3io_bin(Aws::S3::S3Client const& client, 
+                   Aws::String const& bucket, Aws::String const& key);
 
 #endif

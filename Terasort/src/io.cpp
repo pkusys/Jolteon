@@ -1,7 +1,7 @@
 #include "io.h"
 
-std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> GetConsoleLoggerFactory()
-{
+std::function<std::shared_ptr<Aws::Utils::Logging::LogSystemInterface>()> 
+GetConsoleLoggerFactory() {
     return [] {
         return Aws::MakeShared<Aws::Utils::Logging::ConsoleLogSystem>(
             "console_logger", Aws::Utils::Logging::LogLevel::Trace);
@@ -12,8 +12,7 @@ std::string upload_file_string(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key,
-    Aws::String const& body)
-{
+    Aws::String const& body) {
     using namespace Aws;
 
     Aws::S3::Model::PutObjectRequest request;
@@ -35,8 +34,7 @@ std::string upload_file_string(
     }
 }
 
-std::string read_to_string(Aws::IOStream& stream, Aws::String& output)
-{
+std::string read_to_string(Aws::IOStream& stream, Aws::String& output) {
     Aws::Vector<unsigned char> bytes;
     bytes.reserve(bytes.size() + stream.tellp());
     stream.seekg(0, stream.beg);
@@ -63,8 +61,7 @@ std::string download_file_string(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key,
-    Aws::String& output)
-{
+    Aws::String& output) {
     using namespace Aws;
 
     S3::Model::GetObjectRequest request;
@@ -86,8 +83,7 @@ std::string upload_file_binary(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key,
-    ByteVec const& body)
-{
+    ByteVec const& body) {
     using namespace Aws;
 
     Aws::S3::Model::PutObjectRequest request;
@@ -100,11 +96,9 @@ std::string upload_file_binary(
 
     auto outcome = client.PutObject(request);
     if (outcome.IsSuccess()) {
-        //AWS_LOGSTREAM_INFO(TAG, "Upload completed!");
         return {};
     }
     else {
-        //AWS_LOGSTREAM_ERROR(TAG, "Failed with error: " << outcome.GetError());
         return outcome.GetError().GetMessage();
     }
 }
@@ -121,7 +115,8 @@ std::string read_to_binary(Aws::IOStream& stream, ByteVec& output)
         auto bytesRead = stream.gcount();
 
         if (bytesRead > 0) {
-            output.insert(output.end(), (unsigned char*)streamBuffer, (unsigned char*)streamBuffer + bytesRead);
+            output.insert(output.end(), (unsigned char*)streamBuffer, 
+                          (unsigned char*)streamBuffer + bytesRead);
         }
     }
     return {};
@@ -131,8 +126,7 @@ std::string download_file_binary(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
     Aws::String const& key,
-    ByteVec& output)
-{
+    ByteVec& output) {
     using namespace Aws;
 
     S3::Model::GetObjectRequest request;
@@ -175,7 +169,7 @@ void test_s3io_bin(Aws::S3::S3Client const& client,
     // p1.resize(size);
     // fin.read((char *)p1.data(), size);
 	// fin.close();
-	// auto err0 = upload_file_binary(client, bucket, key, p1);
+	// auto err0 = upload_file_binary(client, bucket, key, p1); 
 
 	ByteVec part1;
 	auto err = download_file_binary(client, bucket, key, part1);
