@@ -8,14 +8,14 @@ from multiprocessing import Pool
 # st = time.time()
 
 # MapReduce configuration
-num_partitions = 4
-num_mappers = 4
-num_reducers = 3
-func_type = 1  # 0: map, 1: reduce
+num_partitions = 256
+num_mappers = 16
+num_reducers = 8
+func_type = 0  # 0: map, 1: reduce
 
 payload = {
-    "s3bucket_in": "serverless-bound", "s3key_in": "terasort/test/test-128m",
-    "s3bucket_out": "serverless-bound", "s3key_out":"terasort/test/test-128m",
+    "s3bucket_in": "serverless-bound", "s3key_in": "terasort/test/10g/test-10g",
+    "s3bucket_out": "serverless-bound", "s3key_out":"terasort/test/10g/test-10g",
     "num_mappers": num_mappers, "num_reducers": num_reducers, "num_partitions": num_partitions, 
     "func_type": "map", "task_id": 0
 }
