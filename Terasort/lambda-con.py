@@ -9,13 +9,14 @@ from multiprocessing import Pool
 
 # MapReduce configuration
 num_partitions = 256
-num_mappers = 16
-num_reducers = 8
-func_type = 0  # 0: map, 1: reduce
+num_mappers = 256
+num_reducers = 128
+func_type = 1  # 0: map, 1: reduce
+func_name = 'terasort-1' if func_type == 0 else 'terasort-2'
 
 payload = {
     "s3bucket_in": "serverless-bound", "s3key_in": "terasort/test/10g/test-10g",
-    "s3bucket_out": "serverless-bound", "s3key_out":"terasort/test/10g/test-10g",
+    "s3bucket_out": "serverless-bound", "s3key_out":"terasort/test/10g-partitions/test-10g",
     "num_mappers": num_mappers, "num_reducers": num_reducers, "num_partitions": num_partitions, 
     "func_type": "map", "task_id": 0
 }
@@ -27,7 +28,8 @@ def invoke_lambda(idx: int):
     payload['task_id'] = idx
 
     response = client.invoke(
-        FunctionName='terasort-1',
+        # FunctionName='terasort-1',
+        FunctionName=func_name,
         LogType='Tail',
         Payload=json.dumps(payload),
         # Qualifier='0',
@@ -90,6 +92,9 @@ if __name__ == '__main__':
     
     num = num_mappers if func_type == 0 else num_reducers
     payload['func_type'] = "map" if func_type == 0 else "reduce"
+    if func_type == 1:
+        payload['s3key_in'] = "terasort/test/10g-partitions/test-10g"
+        payload['s3key_out'] = "terasort/test/10g-sorted/test-10g"
 
     pool = Pool(num)
     # initialize

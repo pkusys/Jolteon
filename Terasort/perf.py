@@ -1,7 +1,9 @@
 import re
 import json
 
-num = 16
+num = 128
+type_tag = 1
+func_type = 'map' if type_tag == 0 else 'reduce'
 
 if __name__ == '__main__':
     billed_time = 0
@@ -17,7 +19,7 @@ if __name__ == '__main__':
     min_duration = 1e9
 
     for id in range(num):
-        fn = './logs/terasort-map-task{}.log'.format(id)
+        fn = './logs/terasort-{}-task{}.log'.format(func_type, id)
         with open(fn, 'r') as f:
             lines = f.readlines()
 
@@ -59,8 +61,10 @@ if __name__ == '__main__':
             max_duration = max(max_duration, res['duration'])
             min_duration = min(min_duration, res['duration'])
         
-    
-    print("Billing: {} $".format(billed_time * 1792 / 1024 * 0.0000000167 + num * 0.2 / 1000000))
+    if func_type == 'map':
+        print("Billing: {} $".format(billed_time * 1792 / 1024 * 0.0000000167 + num * 0.2 / 1000000))
+    else:
+        print("Billing: {} $".format(billed_time * 3584 / 1024 * 0.0000000167 + num * 0.2 / 1000000))
     print("Avg Duration: {} ms".format(avg_duration / num))
     print("Max Duration: {} ms".format(max_duration))
     print("Min Duration: {} ms".format(min_duration))
