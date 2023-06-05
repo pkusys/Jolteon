@@ -142,6 +142,31 @@ std::string download_file_binary(
     }
 }
 
+std::string download_file_binary_with_range(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key,
+    unsigned long long start,
+    unsigned long long end, 
+    ByteVec& output) {
+    using namespace Aws;
+
+    S3::Model::GetObjectRequest request;
+    request.WithBucket(bucket).WithKey(key);
+    Aws::String range;
+    range = "bytes=" + std::to_string(start) + "-" + std::to_string(end);
+    request.SetRange(range);
+
+    auto outcome = client.GetObject(request);
+    if (outcome.IsSuccess()) {
+        auto& s = outcome.GetResult().GetBody();
+        return read_to_binary(s, output);
+    }
+    else {
+        return outcome.GetError().GetMessage();
+    }
+}
+
 void ConvertRecordArrayToBinary(
     const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output) {
     size_t byte_size = record_array.size * csortlib::RECORD_SIZE;
@@ -155,6 +180,26 @@ void ConvertRecordArrayToBinary(
     output.resize(byte_size);
     memcpy(output.data(), (unsigned char *)record_array.ptr, byte_size);
 }
+
+std::string upload_records(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key,
+    csortlib::ConstArray<csortlib::Record> const& records) {
+    
+    ByteVec data;
+    ConvertRecordArrayToBinary(records, data);
+    auto err = upload_file_binary(client, bucket, key, data);
+    return err;
+}
+
+// void *upload_records_pthread(void *args) {
+//     auto *arg_ = (struct UploadRecordsArgs *)args;
+//     ByteVec data;
+//     ConvertRecordArrayToBinary(records, data);
+//     auto err = upload_file_binary(client, bucket, key, data);
+//     return NULL;
+// }
 
 void test_s3io_bin(Aws::S3::S3Client const& client,
     Aws::String const& bucket,

@@ -4,14 +4,15 @@ import time
 import base64
 import io
 from multiprocessing import Pool
+import os
 
 # st = time.time()
 
 # MapReduce configuration
 num_partitions = 256
-num_mappers = 256
-num_reducers = 128
-func_type = 1  # 0: map, 1: reduce
+num_mappers = 512
+num_reducers = 64
+func_type = 0  # 0: map, 1: reduce
 func_name = 'terasort-1' if func_type == 0 else 'terasort-2'
 
 payload = {
@@ -81,6 +82,8 @@ def invoke_lambda(idx: int):
         f.write(log_result)
         f.write('\n\n')
         f.write(str(res))
+        # f.write('\n\n')
+        # f.write(str(resp_payload))
     
     return res
 
@@ -112,3 +115,5 @@ if __name__ == '__main__':
 
     pool.close()
     pool.join()
+
+    os.system('python3 perf.py >> ./terasort.log')

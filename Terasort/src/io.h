@@ -48,6 +48,14 @@ std::string download_file_binary(
     Aws::String const& key,
     ByteVec& output);
 
+std::string download_file_binary_with_range(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key,
+    unsigned long long start,
+    unsigned long long end, 
+    ByteVec& output);
+
 std::string upload_file_binary(
     Aws::S3::S3Client const& client,
     Aws::String const& bucket,
@@ -59,6 +67,22 @@ void ConvertRecordArrayToBinary(
     const csortlib::ConstArray<csortlib::Record> &record_array, ByteVec &output);
 void ConvertRecordArrayToBinary(
     const csortlib::Array<csortlib::Record> &record_array, ByteVec &output);
+
+std::string upload_records(
+    Aws::S3::S3Client const& client,
+    Aws::String const& bucket,
+    Aws::String const& key,
+    csortlib::ConstArray<csortlib::Record> const& records);
+
+// struct UploadRecordsArgs {
+//     Aws::S3::S3Client const& client;
+//     Aws::String const& bucket;
+//     Aws::String const& key;
+//     csortlib::ConstArray<csortlib::Record> const& records;
+// };
+
+// void *upload_records_pthread(void *args);
+
 
 void test_s3io_bin(Aws::S3::S3Client const& client, 
                    Aws::String const& bucket, Aws::String const& key);

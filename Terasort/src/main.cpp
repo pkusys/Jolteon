@@ -1,5 +1,7 @@
 #include <aws/lambda-runtime/runtime.h>
 #include <chrono>
+#include <thread>
+#include <pthread.h>
 
 #include "csortlib.h"
 #include "io.h"
@@ -125,29 +127,47 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
     long sort_duration = 0;
     long write_duration = 0;
 
+    unsigned long long task_records = 0;
+    unsigned long long end_records = 0;
+    unsigned long long start_records = 0;
+
     if (func_type == "map") {
         start_time = get_time();
-        // Compute which partitions to process
-        size_t parts_per_task = num_partitions / num_mappers;
-        size_t remainder = num_partitions % num_mappers;
-        size_t start = 0, end = 0;
-        if (task_id < remainder) {
-            start = task_id * (parts_per_task + 1);
-            end = start + parts_per_task + 1;
-        } else {
-            start = remainder * (parts_per_task + 1) + (task_id - remainder) * parts_per_task;
-            end = start + parts_per_task;
+        // // Compute which partitions to process
+        // size_t parts_per_task = num_partitions / num_mappers;
+        // size_t remainder = num_partitions % num_mappers;
+        // size_t start = 0, end = 0;
+        // if (task_id < remainder) {
+        //     start = task_id * (parts_per_task + 1);
+        //     end = start + parts_per_task + 1;
+        // } else {
+        //     start = remainder * (parts_per_task + 1) + (task_id - remainder) * parts_per_task;
+        //     end = start + parts_per_task;
+        // }
+
+        // // Download records from s3, all append to record_bytes
+        ByteVec record_bytes;
+        // for (size_t i = start; i < end; i++) {
+        //     Aws::String part_key = key_in + "_" + std::to_string(i);
+        //     auto err = download_file_binary(client, bucket_in, part_key, record_bytes);
+        //     if (!err.empty()) {
+        //         return invocation_response::failure(err, "DownloadFailure");
+        //     }
+        // }
+
+        // Compute bytes range to download
+        task_records = 10*1000*1000*1000LL / num_mappers / RECORD_SIZE;
+        start_records = task_id * task_records;
+        end_records = start_records + task_records;
+        if (task_id == num_mappers - 1) {
+            end_records += (10*1000*1000*1000LL / RECORD_SIZE) % num_mappers;
         }
 
-        // Download records from s3, all append to record_bytes
-        ByteVec record_bytes;
-        for (size_t i = start; i < end; i++) {
-            Aws::String part_key = key_in + "_" + std::to_string(i);
-            auto err = download_file_binary(client, bucket_in, part_key, record_bytes);
-            if (!err.empty()) {
-                return invocation_response::failure(err, "DownloadFailure");
-            }
+        auto err = download_file_binary_with_range(client, bucket_in, key_in, start_records * RECORD_SIZE, end_records * RECORD_SIZE, record_bytes);
+        if (!err.empty()) {
+            return invocation_response::failure(err, "DownloadFailure");
         }
+
         end_time = get_time();
         read_duration = get_time_duration_ms(start_time, end_time);
 
@@ -179,14 +199,27 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
             const auto &partition = record_arrays[i];
             Aws::String part_key = key_out + "_map" + std::to_string(task_id) + 
                                    "_part" + std::to_string(i);
-            ByteVec part_data; 
-            // Convert partition to string
+            ByteVec part_data;
             ConvertRecordArrayToBinary(partition, part_data);
             auto err = upload_file_binary(client, bucket_out, part_key, part_data); 
             if (!err.empty()) {
                 return invocation_response::failure(err, "UploadFailure");
             }
         }
+
+        // // Upload in parallel using threads
+        // std::vector<std::thread> threads;
+        // threads.reserve(record_arrays.size());
+        // for (size_t i = 0; i < record_arrays.size(); ++i) {
+        //     const auto &partition = record_arrays[i];
+        //     Aws::String part_key = key_out + "_map" + std::to_string(task_id) + 
+        //                            "_part" + std::to_string(i);
+        //     threads.emplace_back(upload_records, client, bucket_out, part_key, partition);
+        // }
+        // for (auto &t : threads) {
+        //     t.join();
+        // }
+
         end_time = get_time();
         write_duration = get_time_duration_ms(start_time, end_time);
 
@@ -258,7 +291,9 @@ invocation_response my_handler(invocation_request const& req, Aws::S3::S3Client 
                                         " read_duration " + std::to_string(read_duration) + " ms," + 
                                         " record_creation_duration " + std::to_string(records_creation_duration) + " ms," + 
                                         " sort_duration " + std::to_string(sort_duration) + " ms," + 
-                                        " write_duration " + std::to_string(write_duration) + " ms", 
+                                        " write_duration " + std::to_string(write_duration) + " ms" +
+                                        " start_records " + std::to_string(start_records) + 
+                                        " end_records " + std::to_string(end_records), 
                                         "application/json");
 }
 

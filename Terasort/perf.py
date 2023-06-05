@@ -1,8 +1,8 @@
 import re
 import json
 
-num = 128
-type_tag = 1
+num = 512
+type_tag = 0
 func_type = 'map' if type_tag == 0 else 'reduce'
 
 if __name__ == '__main__':
@@ -65,9 +65,10 @@ if __name__ == '__main__':
         print("Billing: {} $".format(billed_time * 1792 / 1024 * 0.0000000167 + num * 0.2 / 1000000))
     else:
         print("Billing: {} $".format(billed_time * 3584 / 1024 * 0.0000000167 + num * 0.2 / 1000000))
-    print("Avg Duration: {} ms".format(avg_duration / num))
-    print("Max Duration: {} ms".format(max_duration))
-    print("Min Duration: {} ms".format(min_duration))
-    print("Avg Read: {} ms".format(read_time / num))
-    print("Avg Sort: {} ms".format(sort_time / num))
-    print("Avg Write: {} ms".format(write_time / num))
+    print("Avg Duration: {} s".format(avg_duration / num / 1000))
+    print("Max Duration: {} s".format(max_duration / 1000))
+    print("Min Duration: {} s".format(min_duration / 1000))
+    print("Avg Read: {} s".format(read_time / num / 1000))
+    print("Avg Sort: {} s".format(sort_time / num / 1000))
+    print("Avg Write: {} s".format(write_time / num / 1000))
+    print("\n\n")
