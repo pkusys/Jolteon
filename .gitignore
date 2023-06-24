@@ -183,3 +183,4 @@ cython_debug/
 .DS_Store
 logs
 **/logs
+TPC-DS/data/*
