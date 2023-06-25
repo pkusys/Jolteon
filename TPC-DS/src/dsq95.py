@@ -112,6 +112,13 @@ def q95_stage1(key):
     t0 = time.time()
     wanted_columns = ['ws_order_number', 'ws_warehouse_sk']
     ws_s = ws[wanted_columns]
+    print('\n\n')
+    print(ws_s.head())
+    print('\n\n')
+
+    x = ws_s[ws_s['ws_order_number'] == 0]
+    print(x)
+    print("len input = {}".format(len(ws_s)))
     '''
     Group by order_number and list the unique warehouse_sk for each order_number
     Note: the result is computed from a single parallel task, but obtaining the correct result 
@@ -129,6 +136,9 @@ def q95_stage1(key):
         'unique_count_flag': (wh_unique_counts > 1).astype(int), 
         'unique_value': wh_uniques.values
     })
+    print('\n\n')
+    print(wh_uc.head())
+    print('\n\n')
     t1 = time.time()
     tc += t1 - t0
 
@@ -383,97 +393,191 @@ def invoke_q95_func(key):
 
 
 if __name__ == "__main__":
-    key = create_key(task_id=0,
-                     input_address='../data/web_sales', 
+    # local test
+
+    key = create_key(task_id=2,
+                     input_address='tpcds/test-1g/web_sales', 
                      table_name='web_sales', 
                      schema=table_schema,
                      read_pattern='read_partial_table',
-                     output_address='../data/q95_intermediate/q95_stage1',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage1',
+                     storage_mode='s3',
                      num_tasks=30,
                      func_id=1)
 
+    # key = create_key(task_id=0,
+    #                  input_address='../data/web_sales', 
+    #                  table_name='web_sales', 
+    #                  schema=table_schema,
+    #                  read_pattern='read_partial_table',
+    #                  output_address='../data/q95_intermediate/q95_stage1',
+    #                  storage_mode='local',
+    #                  num_tasks=30,
+    #                  func_id=1)
+
     key = create_key(task_id=0,
-                     input_address='../data/q95_intermediate/q95_stage1', 
+                     input_address='tpcds/test-1g/q95_intermediate/q95_stage1', 
                      table_name='stage1', 
                      schema=q95_intermediate_schema,
                      read_pattern='read_multiple_partitions',
-                     output_address='../data/q95_intermediate/q95_stage2',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage2',
+                     storage_mode='s3',
                      num_tasks=10,
                      num_partitions=30,
                      func_id=2)
-    
-    key = create_key(task_id=2,
-                     input_address='../data/web_sales', 
+
+    # key = create_key(task_id=0,
+    #                  input_address='../data/q95_intermediate/q95_stage1', 
+    #                  table_name='stage1', 
+    #                  schema=q95_intermediate_schema,
+    #                  read_pattern='read_multiple_partitions',
+    #                  output_address='../data/q95_intermediate/q95_stage2',
+    #                  storage_mode='local',
+    #                  num_tasks=10,
+    #                  num_partitions=30,
+    #                  func_id=2)
+
+    key = create_key(task_id=0,
+                     input_address='tpcds/test-1g/web_sales', 
                      table_name='web_sales', 
                      schema=table_schema,
                      read_pattern='read_partial_table',
-                     output_address='../data/q95_intermediate/q95_stage3',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage3',
+                     storage_mode='s3',
                      num_tasks=30,
                      func_id=3)
     
-    key = create_key(task_id=0,
-                     input_address='../data/web_returns', 
+    # key = create_key(task_id=2,
+    #                  input_address='../data/web_sales', 
+    #                  table_name='web_sales', 
+    #                  schema=table_schema,
+    #                  read_pattern='read_partial_table',
+    #                  output_address='../data/q95_intermediate/q95_stage3',
+    #                  storage_mode='local',
+    #                  num_tasks=30,
+    #                  func_id=3)
+
+    key = create_key(task_id=1,
+                     input_address='tpcds/test-1g/web_returns', 
                      table_name='web_returns', 
                      schema=table_schema,
                      read_pattern='read_partial_table',
-                     output_address='../data/q95_intermediate/q95_stage4',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage4',
+                     storage_mode='s3',
                      num_tasks=2,
                      func_id=4)
     
+    # key = create_key(task_id=0,
+    #                  input_address='../data/web_returns', 
+    #                  table_name='web_returns', 
+    #                  schema=table_schema,
+    #                  read_pattern='read_partial_table',
+    #                  output_address='../data/q95_intermediate/q95_stage4',
+    #                  storage_mode='local',
+    #                  num_tasks=2,
+    #                  func_id=4)
+
     key = create_key(task_id=0,
-                     input_address=['../data/q95_intermediate/q95_stage3', 
-                                    '../data/q95_intermediate/q95_stage4', 
-                                    '../data/date_dim',
-                                    '../data/q95_intermediate/q95_stage2'], 
+                     input_address=['tpcds/test-1g/q95_intermediate/q95_stage3', 
+                                    'tpcds/test-1g/q95_intermediate/q95_stage4', 
+                                    'tpcds/test-1g/date_dim',
+                                    'tpcds/test-1g/q95_intermediate/q95_stage2'], 
                      table_name=['stage3', 'stage4', 'date_dim', 'stage2'], 
                      schema=[q95_intermediate_schema, q95_intermediate_schema, 
                              table_schema, q95_intermediate_schema],
                      read_pattern=['read_multiple_partitions', 'read_all_partitions', 
                                    'read_table', 'read_all_partitions'],
-                     output_address='../data/q95_intermediate/q95_stage5',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage5',
+                     storage_mode='s3',
                      num_tasks=30,
                      num_partitions=[30, 2, 1, 1],
                      func_id=5)
     
+    # key = create_key(task_id=0,
+    #                  input_address=['../data/q95_intermediate/q95_stage3', 
+    #                                 '../data/q95_intermediate/q95_stage4', 
+    #                                 '../data/date_dim',
+    #                                 '../data/q95_intermediate/q95_stage2'], 
+    #                  table_name=['stage3', 'stage4', 'date_dim', 'stage2'], 
+    #                  schema=[q95_intermediate_schema, q95_intermediate_schema, 
+    #                          table_schema, q95_intermediate_schema],
+    #                  read_pattern=['read_multiple_partitions', 'read_all_partitions', 
+    #                                'read_table', 'read_all_partitions'],
+    #                  output_address='../data/q95_intermediate/q95_stage5',
+    #                  storage_mode='local',
+    #                  num_tasks=30,
+    #                  num_partitions=[30, 2, 1, 1],
+    #                  func_id=5)
+
     key = create_key(task_id=0,
-                     input_address='../data/customer_address', 
+                     input_address='tpcds/test-1g/customer_address', 
                      table_name='customer_address', 
                      schema=table_schema,
-                     read_pattern='read_partial_table',
-                     output_address='../data/q95_intermediate/q95_stage6',
-                     storage_mode='local',
+                     read_pattern='read_table',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage6',
+                     storage_mode='s3',
                      num_tasks=1,
                      func_id=6)
     
+    # key = create_key(task_id=0,
+    #                  input_address='../data/customer_address', 
+    #                  table_name='customer_address', 
+    #                  schema=table_schema,
+    #                  read_pattern='read_partial_table',
+    #                  output_address='../data/q95_intermediate/q95_stage6',
+    #                  storage_mode='local',
+    #                  num_tasks=1,
+    #                  func_id=6)
+
     key = create_key(task_id=0,
-                     input_address=['../data/q95_intermediate/q95_stage5', 
-                                    '../data/q95_intermediate/q95_stage6', 
-                                    '../data/web_site'], 
+                     input_address=['tpcds/test-1g/q95_intermediate/q95_stage5', 
+                                    'tpcds/test-1g/q95_intermediate/q95_stage6', 
+                                    'tpcds/test-1g/web_site'], 
                      table_name=['stage5', 'stage6', 'web_site'], 
                      schema=[q95_intermediate_schema, q95_intermediate_schema, table_schema],
                      read_pattern=['read_multiple_partitions', 'read_all_partitions', 
                                    'read_table'],
-                     output_address='../data/q95_intermediate/q95_stage7',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage7',
+                     storage_mode='s3',
                      num_tasks=1,
                      num_partitions=[1, 1, 1],
                      func_id=7)
+    
+    # key = create_key(task_id=0,
+    #                  input_address=['../data/q95_intermediate/q95_stage5', 
+    #                                 '../data/q95_intermediate/q95_stage6', 
+    #                                 '../data/web_site'], 
+    #                  table_name=['stage5', 'stage6', 'web_site'], 
+    #                  schema=[q95_intermediate_schema, q95_intermediate_schema, table_schema],
+    #                  read_pattern=['read_multiple_partitions', 'read_all_partitions', 
+    #                                'read_table'],
+    #                  output_address='../data/q95_intermediate/q95_stage7',
+    #                  storage_mode='local',
+    #                  num_tasks=1,
+    #                  num_partitions=[1, 1, 1],
+    #                  func_id=7)
 
     key = create_key(task_id=0,
-                     input_address='../data/q95_intermediate/q95_stage7', 
+                     input_address='tpcds/test-1g/q95_intermediate/q95_stage7', 
                      table_name='stage7', 
                      schema=q95_intermediate_schema,
                      read_pattern='read_all_partitions',
-                     output_address='../data/q95_intermediate/q95_stage8',
-                     storage_mode='local',
+                     output_address='tpcds/test-1g/q95_intermediate/q95_stage8',
+                     storage_mode='s3',
                      num_tasks=1,
                      num_partitions=1,
                      func_id=8)
+
+    # key = create_key(task_id=0,
+    #                  input_address='../data/q95_intermediate/q95_stage7', 
+    #                  table_name='stage7', 
+    #                  schema=q95_intermediate_schema,
+    #                  read_pattern='read_all_partitions',
+    #                  output_address='../data/q95_intermediate/q95_stage8',
+    #                  storage_mode='local',
+    #                  num_tasks=1,
+    #                  num_partitions=1,
+    #                  func_id=8)
 
     res = invoke_q95_func(key)
     print('\n\n')

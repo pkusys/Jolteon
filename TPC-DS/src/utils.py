@@ -701,7 +701,8 @@ def read_s3_partial_table(key, index, partitions, s3_client=None):
         
     end_bytes = meta_data.iloc[end_row]['num_bytes']
     
-    bytes_range = "bytes=" + str(start_bytes) + "-" + str(end_bytes)
+    # bytes_range is inclusive on both ends
+    bytes_range = "bytes=" + str(start_bytes) + "-" + str(end_bytes - 1)
     
     # read partial s3 files
     names = list(key['column_names'])
@@ -856,7 +857,7 @@ def read_s3_multiple_partitions(key, threadpool=True):
     k['column_names'] = key['column_names']
     k['dtypes'] = key['dtypes']
 
-    ds = [i for i in range(key['number_partitions'])]
+    ds = [i for i in range(start_index, end_index)]
     s3_client = boto3.client("s3")
 
     if threadpool:
