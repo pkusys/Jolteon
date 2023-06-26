@@ -71,4 +71,17 @@ class Workflow:
 
 if __name__ == '__main__':
     wf = Workflow('tpcds-96', './config.json')
+    for i in wf.stages:
+        print(i, end=' ')
+        
+    print('\n------')
+    
+    for i in wf.sources:
+        print(i, end=' ')
+    
+    print('\n------')
+    
+    for i in wf.sinks:
+        print(i, end=' ')
+    print()
     

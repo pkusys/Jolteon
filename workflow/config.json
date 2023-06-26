@@ -27,17 +27,17 @@
     },
     "5":{
         "stage_name": "stage6",
-        "parents": [4],
+        "parents": [4, 6],
         "children": [7]
     },
     "6":{
         "stage_name": "stage7",
         "parents": [],
-        "children": [7]
+        "children": [5]
     },
     "7":{
         "stage_name": "stage8",
-        "parents": [5,6],
+        "parents": [5],
         "children": []
     }
 }
