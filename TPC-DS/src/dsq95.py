@@ -370,215 +370,256 @@ def q95_stage8(key):
     return res
 
 
-def invoke_q95_func(key):
+def invoke_q95_func(event):
+    schema = merge_dicts(table_schema, q95_intermediate_schema)
+    schemas = [schema] * len(event['input_address'])
+
+    key = create_key(task_id=event['task_id'],
+            input_address=event['input_address'], 
+            table_name=event['table_name'], 
+            schema=schemas,
+            read_pattern=event['read_pattern'],
+            output_address=event['output_address'],
+            storage_mode=event['storage_mode'],
+            num_tasks=event['num_tasks'],
+            num_partitions=event['num_partitions'],
+            func_id=event['func_id'])
+    
     func_id = key['func_id']
-    if func_id == 1:
+    if func_id == 0:
         return q95_stage1(key)
-    elif func_id == 2:
+    elif func_id == 1:
         return q95_stage2(key)
-    elif func_id == 3:
+    elif func_id == 2:
         return q95_stage3(key)
-    elif func_id == 4:
+    elif func_id == 3:
         return q95_stage4(key)
-    elif func_id == 5:
+    elif func_id == 4:
         return q95_stage5(key)
-    elif func_id == 6:
+    elif func_id == 5:
         return q95_stage6(key)
-    elif func_id == 7:
+    elif func_id == 6:
         return q95_stage7(key)
-    elif func_id == 8:
+    elif func_id == 7:
         return q95_stage8(key)
     else:
         raise ValueError('Invalid func_id')
 
 
 if __name__ == "__main__":
+    schema = merge_dicts(table_schema, q95_intermediate_schema)
     # local test
 
-    key = create_key(task_id=2,
-                     input_address='tpcds/test-1g/web_sales', 
-                     table_name='web_sales', 
-                     schema=table_schema,
-                     read_pattern='read_partial_table',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage1',
-                     storage_mode='s3',
-                     num_tasks=30,
-                     func_id=1)
+    dict_stage1 = {
+        'task_id': 2,
+        'input_address': 'tpcds/test-1g/web_sales',
+        'table_name': 'web_sales',
+        'read_pattern': 'read_partial_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
+        'storage_mode': 's3',
+        'num_tasks': 30,
+        'func_id': 0
+    }
 
-    # key = create_key(task_id=0,
-    #                  input_address='../data/web_sales', 
-    #                  table_name='web_sales', 
-    #                  schema=table_schema,
-    #                  read_pattern='read_partial_table',
-    #                  output_address='../data/q95_intermediate/q95_stage1',
-    #                  storage_mode='local',
-    #                  num_tasks=30,
-    #                  func_id=1)
+    dict_stage1_local = {
+        'task_id': 0,
+        'input_address': '../data/web_sales',
+        'table_name': 'web_sales',
+        'read_pattern': 'read_partial_table',
+        'output_address': '../data/q95_intermediate/q95_stage1',
+        'storage_mode': 'local',
+        'num_tasks': 30,
+        'func_id': 0
+    }
 
-    key = create_key(task_id=0,
-                     input_address='tpcds/test-1g/q95_intermediate/q95_stage1', 
-                     table_name='stage1', 
-                     schema=q95_intermediate_schema,
-                     read_pattern='read_multiple_partitions',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage2',
-                     storage_mode='s3',
-                     num_tasks=10,
-                     num_partitions=30,
-                     func_id=2)
 
-    # key = create_key(task_id=0,
-    #                  input_address='../data/q95_intermediate/q95_stage1', 
-    #                  table_name='stage1', 
-    #                  schema=q95_intermediate_schema,
-    #                  read_pattern='read_multiple_partitions',
-    #                  output_address='../data/q95_intermediate/q95_stage2',
-    #                  storage_mode='local',
-    #                  num_tasks=10,
-    #                  num_partitions=30,
-    #                  func_id=2)
+    dict_stage2 = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
+        'table_name': 'stage1',
+        'read_pattern': 'read_multiple_partitions',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage2',
+        'storage_mode': 's3',
+        'num_tasks': 10,
+        'num_partitions': 30,
+        'func_id': 1
+    }
 
-    key = create_key(task_id=0,
-                     input_address='tpcds/test-1g/web_sales', 
-                     table_name='web_sales', 
-                     schema=table_schema,
-                     read_pattern='read_partial_table',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage3',
-                     storage_mode='s3',
-                     num_tasks=30,
-                     func_id=3)
+
+    dict_stage2_local = {
+        'task_id': 0,
+        'input_address': '../data/q95_intermediate/q95_stage1',
+        'table_name': 'stage1',
+        'read_pattern': 'read_multiple_partitions',
+        'output_address': '../data/q95_intermediate/q95_stage2',
+        'storage_mode': 'local',
+        'num_tasks': 10,
+        'num_partitions': 30,
+        'func_id': 1
+    }
+
+
+    dict_stage3 = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/web_sales',
+        'table_name': 'web_sales',
+        'read_pattern': 'read_partial_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage3',
+        'storage_mode': 's3',
+        'num_tasks': 30,
+        'func_id': 2
+    }
+
     
-    # key = create_key(task_id=2,
-    #                  input_address='../data/web_sales', 
-    #                  table_name='web_sales', 
-    #                  schema=table_schema,
-    #                  read_pattern='read_partial_table',
-    #                  output_address='../data/q95_intermediate/q95_stage3',
-    #                  storage_mode='local',
-    #                  num_tasks=30,
-    #                  func_id=3)
+    dict_stage3_local = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/web_sales',
+        'table_name': 'web_sales',
+        'read_pattern': 'read_partial_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage3',
+        'storage_mode': 's3',
+        'num_tasks': 30,
+        'func_id': 2
+    }
 
-    key = create_key(task_id=1,
-                     input_address='tpcds/test-1g/web_returns', 
-                     table_name='web_returns', 
-                     schema=table_schema,
-                     read_pattern='read_partial_table',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage4',
-                     storage_mode='s3',
-                     num_tasks=2,
-                     func_id=4)
+
+    dict_stage4 = {
+        'task_id': 1,
+        'input_address': 'tpcds/test-1g/web_returns',
+        'table_name': 'web_returns',
+        'read_pattern': 'read_partial_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage4',
+        'storage_mode': 's3',
+        'num_tasks': 2,
+        'func_id': 3
+    }
+
     
-    # key = create_key(task_id=0,
-    #                  input_address='../data/web_returns', 
-    #                  table_name='web_returns', 
-    #                  schema=table_schema,
-    #                  read_pattern='read_partial_table',
-    #                  output_address='../data/q95_intermediate/q95_stage4',
-    #                  storage_mode='local',
-    #                  num_tasks=2,
-    #                  func_id=4)
+    dict_stage4_local = {
+        'task_id': 0,
+        'input_address': '../data/web_returns',
+        'table_name': 'web_returns',
+        'read_pattern': 'read_partial_table',
+        'output_address': '../data/q95_intermediate/q95_stage4',
+        'storage_mode': 'local',
+        'num_tasks': 2,
+        'func_id': 3
+    }
 
-    key = create_key(task_id=0,
-                     input_address=['tpcds/test-1g/q95_intermediate/q95_stage3', 
-                                    'tpcds/test-1g/q95_intermediate/q95_stage4', 
-                                    'tpcds/test-1g/date_dim',
-                                    'tpcds/test-1g/q95_intermediate/q95_stage2'], 
-                     table_name=['stage3', 'stage4', 'date_dim', 'stage2'], 
-                     schema=[q95_intermediate_schema, q95_intermediate_schema, 
-                             table_schema, q95_intermediate_schema],
-                     read_pattern=['read_multiple_partitions', 'read_all_partitions', 
-                                   'read_table', 'read_all_partitions'],
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage5',
-                     storage_mode='s3',
-                     num_tasks=30,
-                     num_partitions=[30, 2, 1, 1],
-                     func_id=5)
+
+    dict_stage5 = {
+        'task_id': 0,
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage3', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage4', 
+                        'tpcds/test-1g/date_dim',
+                        'tpcds/test-1g/q95_intermediate/q95_stage2'],
+        'table_name': ['stage3', 'stage4', 'date_dim', 'stage2'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 
+                        'read_table', 'read_all_partitions'],
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage5',
+        'storage_mode': 's3',
+        'num_tasks': 30,
+        'num_partitions': [30, 2, 1, 1],
+        'func_id': 4
+    }
+
+    dict_stage5_local = {
+        'task_id': 0,
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage3', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage4', 
+                        'tpcds/test-1g/date_dim',
+                        'tpcds/test-1g/q95_intermediate/q95_stage2'],
+        'table_name': ['stage3', 'stage4', 'date_dim', 'stage2'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 
+                        'read_table', 'read_all_partitions'],
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage5',
+        'storage_mode': 's3',
+        'num_tasks': 30,
+        'num_partitions': [30, 2, 1, 1],
+        'func_id': 4
+    }
     
-    # key = create_key(task_id=0,
-    #                  input_address=['../data/q95_intermediate/q95_stage3', 
-    #                                 '../data/q95_intermediate/q95_stage4', 
-    #                                 '../data/date_dim',
-    #                                 '../data/q95_intermediate/q95_stage2'], 
-    #                  table_name=['stage3', 'stage4', 'date_dim', 'stage2'], 
-    #                  schema=[q95_intermediate_schema, q95_intermediate_schema, 
-    #                          table_schema, q95_intermediate_schema],
-    #                  read_pattern=['read_multiple_partitions', 'read_all_partitions', 
-    #                                'read_table', 'read_all_partitions'],
-    #                  output_address='../data/q95_intermediate/q95_stage5',
-    #                  storage_mode='local',
-    #                  num_tasks=30,
-    #                  num_partitions=[30, 2, 1, 1],
-    #                  func_id=5)
 
-    key = create_key(task_id=0,
-                     input_address='tpcds/test-1g/customer_address', 
-                     table_name='customer_address', 
-                     schema=table_schema,
-                     read_pattern='read_table',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage6',
-                     storage_mode='s3',
-                     num_tasks=1,
-                     func_id=6)
+    dict_stage6 = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/customer_address',
+        'table_name': 'customer_address',
+        'read_pattern': 'read_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage6',
+        'storage_mode': 's3',
+        'num_tasks': 1,
+        'func_id': 5
+    }
+
     
-    # key = create_key(task_id=0,
-    #                  input_address='../data/customer_address', 
-    #                  table_name='customer_address', 
-    #                  schema=table_schema,
-    #                  read_pattern='read_partial_table',
-    #                  output_address='../data/q95_intermediate/q95_stage6',
-    #                  storage_mode='local',
-    #                  num_tasks=1,
-    #                  func_id=6)
+    dict_stage6_local = {
+        'task_id': 0,
+        'input_address': '../data/customer_address',
+        'table_name': 'customer_address',
+        'read_pattern': 'read_partial_table',
+        'output_address': '../data/q95_intermediate/q95_stage6',
+        'storage_mode': 'local',
+        'num_tasks': 1,
+        'func_id': 5
+    }
 
-    key = create_key(task_id=0,
-                     input_address=['tpcds/test-1g/q95_intermediate/q95_stage5', 
-                                    'tpcds/test-1g/q95_intermediate/q95_stage6', 
-                                    'tpcds/test-1g/web_site'], 
-                     table_name=['stage5', 'stage6', 'web_site'], 
-                     schema=[q95_intermediate_schema, q95_intermediate_schema, table_schema],
-                     read_pattern=['read_multiple_partitions', 'read_all_partitions', 
-                                   'read_table'],
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage7',
-                     storage_mode='s3',
-                     num_tasks=1,
-                     num_partitions=[1, 1, 1],
-                     func_id=7)
+
+    dict_stage7 = {
+        'task_id': 0,
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage5', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage6', 
+                        'tpcds/test-1g/web_site'],
+        'table_name': ['stage5', 'stage6', 'web_site'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage7',
+        'storage_mode': 's3',
+        'num_tasks': 1,
+        'num_partitions': [1, 1, 1],
+        'func_id': 6
+    }
+
     
-    # key = create_key(task_id=0,
-    #                  input_address=['../data/q95_intermediate/q95_stage5', 
-    #                                 '../data/q95_intermediate/q95_stage6', 
-    #                                 '../data/web_site'], 
-    #                  table_name=['stage5', 'stage6', 'web_site'], 
-    #                  schema=[q95_intermediate_schema, q95_intermediate_schema, table_schema],
-    #                  read_pattern=['read_multiple_partitions', 'read_all_partitions', 
-    #                                'read_table'],
-    #                  output_address='../data/q95_intermediate/q95_stage7',
-    #                  storage_mode='local',
-    #                  num_tasks=1,
-    #                  num_partitions=[1, 1, 1],
-    #                  func_id=7)
+    dict_stage7_local = {
+        'task_id': 0,
+        'input_address': ['../data/q95_intermediate/q95_stage5', 
+                        '../data/q95_intermediate/q95_stage6', 
+                        '../data/web_site'],
+        'table_name': ['stage5', 'stage6', 'web_site'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
+        'output_address': '../data/q95_intermediate/q95_stage7',
+        'storage_mode': 'local',
+        'num_tasks': 1,
+        'num_partitions': [1, 1, 1],
+        'func_id': 6
+    }
 
-    key = create_key(task_id=0,
-                     input_address='tpcds/test-1g/q95_intermediate/q95_stage7', 
-                     table_name='stage7', 
-                     schema=q95_intermediate_schema,
-                     read_pattern='read_all_partitions',
-                     output_address='tpcds/test-1g/q95_intermediate/q95_stage8',
-                     storage_mode='s3',
-                     num_tasks=1,
-                     num_partitions=1,
-                     func_id=8)
 
-    # key = create_key(task_id=0,
-    #                  input_address='../data/q95_intermediate/q95_stage7', 
-    #                  table_name='stage7', 
-    #                  schema=q95_intermediate_schema,
-    #                  read_pattern='read_all_partitions',
-    #                  output_address='../data/q95_intermediate/q95_stage8',
-    #                  storage_mode='local',
-    #                  num_tasks=1,
-    #                  num_partitions=1,
-    #                  func_id=8)
+    dict_stage8 = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage7',
+        'table_name': 'stage7',
+        'read_pattern': 'read_all_partitions',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage8',
+        'storage_mode': 's3',
+        'num_tasks': 1,
+        'num_partitions': 1,
+        'func_id': 7
+    }
 
-    res = invoke_q95_func(key)
+
+    dict_stage8_local = {
+        'task_id': 0,
+        'input_address': '../data/q95_intermediate/q95_stage7',
+        'table_name': 'stage7',
+        'read_pattern': 'read_all_partitions',
+        'output_address': '../data/q95_intermediate/q95_stage8',
+        'storage_mode': 'local',
+        'num_tasks': 1,
+        'num_partitions': 1,
+        'func_id': 7
+    }
+
+
+    res = invoke_q95_func(dict_stage5_local)
     print('\n\n')
     print(res)
