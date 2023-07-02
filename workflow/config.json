@@ -1,43 +1,60 @@
 {
+    "workflow_name": "tpcds/dsq95",
     "num_stages": 8,
     "0": {
-        "stage_name": "stage1",
+        "stage_name": "stage0",
         "parents": [],
-        "children": [1]
+        "children": [1],
+        "input_files": ["tpcds/web_sales"],
+        "read_pattern": ["read_partial_table"]
     },
     "1": {
-        "stage_name": "stage2",
+        "stage_name": "stage1",
         "parents": [0],
-        "children": [4]
+        "children": [4],
+        "input_files": ["tpcds/dsq95/stage0/intermediate"],
+        "read_pattern": ["read_multiple_partitions"]
     },
     "2": {
-        "stage_name": "stage3",
+        "stage_name": "stage2",
         "parents": [],
-        "children": [4]
+        "children": [4],
+        "input_files": ["tpcds/web_sales"],
+        "read_pattern": ["read_partial_table"]
     },
     "3": {
-        "stage_name": "stage4",
+        "stage_name": "stage3",
         "parents": [],
-        "children": [4]
+        "children": [4],
+        "input_files": ["tpcds/web_returns"],
+        "read_pattern": ["read_partial_table"]
     },
     "4":{
-        "stage_name": "stage5",
-        "parents": [1,2,3],
-        "children": [5]
+        "stage_name": "stage4",
+        "parents": [2, 3, 1],
+        "children": [6],
+        "input_files": ["tpcds/dsq95/stage2/intermediate", "tpcds/dsq95/stage3/intermediate", "tpcds/date_dim", "tpcds/dsq95/stage1/intermediate"],
+        "read_pattern": ["read_multiple_partitions", "read_all_partitions", "read_table", "read_all_partitions"]
     },
     "5":{
-        "stage_name": "stage6",
-        "parents": [4, 6],
-        "children": [7]
+        "stage_name": "stage5",
+        "parents": [],
+        "children": [6],
+        "input_files": ["tpcds/customer_address"],
+        "read_pattern": ["read_table"]
     },
     "6":{
-        "stage_name": "stage7",
-        "parents": [],
-        "children": [5]
+        "stage_name": "stage6",
+        "parents": [4, 5],
+        "children": [7],
+        "input_files": ["tpcds/dsq95/stage4/intermediate", "tpcds/dsq95/stage5/intermediate", "tpcds/web_site"],
+        "read_pattern": ["read_multiple_partitions", "read_all_partitions", "read_table"]
     },
     "7":{
-        "stage_name": "stage8",
-        "parents": [5],
-        "children": []
+        "stage_name": "stage7",
+        "parents": [6],
+        "children": [],
+        "input_files": ["tpcds/dsq95/stage6/intermediate"],
+        "read_pattern": ["read_all_partitions"]
     }
 }

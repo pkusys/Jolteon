@@ -527,6 +527,22 @@ def get_pd_type(typename):
         return pd.StringDtype()
     raise Exception("Not supported type in pandas: " + typename)
 
+def pd_tpye_to_np_type(pd_type):
+    return str(pd_type)
+    # if pd_type == pd.Int32Dtype():
+    #     return 'Int32'
+    # if pd_type == pd.Int64Dtype():
+    #     return 'Int64'
+    # if pd_type == datetime.datetime:
+    #     return 'date'
+    # if pd_type == pd.Float32Dtype():
+    #     return 'Float32'
+    # if pd_type == pd.Float64Dtype():
+    #     return 'Float64'
+    # if pd_type == pd.StringDtype():
+    #     return 'String'
+    # raise Exception("Not supported type in pandas")
+
 
 def get_np_type(typename):
     if typename == "date":
@@ -549,6 +565,15 @@ def count_lines_wc(file_path):
     
     line_count = int(result.stdout.split()[0])
     return line_count
+
+def merge_dicts(*dicts):
+    result_dict = {}
+    for dictionary in dicts:
+        duplicate_keys = set(dictionary.keys()) & set(result_dict.keys())
+        if duplicate_keys:
+            raise ValueError(f"Duplicate keys: {duplicate_keys}")
+        result_dict.update(dictionary)
+    return result_dict
 
 def genrate_meta_data(df):
     assert isinstance(df, pd.DataFrame)
@@ -754,8 +779,9 @@ def write_local_intermediate(table, output_loc):
 
     table.to_csv(output_loc, sep="|", header=False, index=False, columns=slt_columns)
     output_info['output_address'] = output_loc
-    output_info['column_names'] = slt_columns
-    output_info['dtypes'] = table.dtypes[slt_columns]
+    output_info['column_names'] = slt_columns.tolist()
+    type_list = table.dtypes[slt_columns].tolist()
+    output_info['dtypes'] = [pd_tpye_to_np_type(i) for i in type_list]
 
     return output_info
 
@@ -778,8 +804,9 @@ def write_s3_intermediate(table, output_loc, s3_client=None):
                          Body=csv_buffer.getvalue())
     output_info = {}
     output_info['output_address'] = output_loc
-    output_info['column_names'] = slt_columns
-    output_info['dtypes'] = table.dtypes[slt_columns]
+    output_info['column_names'] = slt_columns.tolist()
+    type_list = table.dtypes[slt_columns].tolist()
+    output_info['dtypes'] = [pd_tpye_to_np_type(i) for i in type_list]
 
     return output_info
 
@@ -969,8 +996,8 @@ def write_intermediate(table, key):
     @return:
         key: dict, a key for a serverless task
 '''
-def create_key(task_id, input_address, table_name, schema, read_pattern, output_address, 
-               num_tasks=1, num_partitions=1, storage_mode='s3', suffix='.dat', func_id=None):
+def create_key(task_id, input_address, table_name, read_pattern, output_address, 
+               num_tasks=1, num_partitions=1, storage_mode='s3', suffix='.dat', schema=None, func_id=None):
     assert isinstance(task_id, int) and task_id >= 0
     assert isinstance(num_tasks, int) and num_tasks > 0 and task_id < num_tasks
 
@@ -996,7 +1023,7 @@ def create_key(task_id, input_address, table_name, schema, read_pattern, output_
     assert isinstance(output_address, str) and isinstance(storage_mode, str) and \
            storage_mode in ['s3', 'local']
     assert isinstance(suffix, str) and suffix in ['.dat', '.csv']
-    assert func_id and isinstance(func_id, int)
+    assert func_id >= 0 and isinstance(func_id, int)
 
     key = {}
     key['task_id'] = task_id
