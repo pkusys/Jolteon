@@ -54,15 +54,15 @@ limit
 '''
 
 q95_intermediate_schema = {
-    'stage1': {
+    'stage0': {
         'ws_order_number': 'int64',
         'unique_count_flag': 'int64',
         'unique_value': 'int64'
     },
-    'stage2': {
+    'stage1': {
         'ws_order_number': 'int64'
     },
-    'stage3': {
+    'stage2': {
         'ws_order_number': 'int64',
         'ws_ext_ship_cost': 'float32',
         'ws_net_profit': 'float32',
@@ -71,10 +71,10 @@ q95_intermediate_schema = {
         'ws_web_site_sk': 'int64',
         'ws_warehouse_sk': 'int64'
     },
-    'stage4': {
+    'stage3': {
         'wr_order_number': 'int64'
     },
-    'stage5': {
+    'stage4': {
         'ws_order_number': 'int64',
         'ws_ext_ship_cost': 'float32',
         'ws_net_profit': 'float32',
@@ -83,15 +83,15 @@ q95_intermediate_schema = {
         'ws_web_site_sk': 'int64',
         'ws_warehouse_sk': 'int64'
     },
-    'stage6': {
+    'stage5': {
         'ca_address_sk': 'int64'
     },
-    'stage7': {
+    'stage6': {
         'ws_order_number': 'int64',
         'ws_ext_ship_cost': 'float32',
         'ws_net_profit': 'float32',
     },
-    'stage8': {
+    'stage7': {
         'unnique_order_number_count': 'int64',
         'ship_cost_sum': 'float32',
         'net_profit_sum': 'float32'
@@ -99,7 +99,7 @@ q95_intermediate_schema = {
 }
 
 
-def q95_stage1(key):
+def q95_stage0(key):
     [tr, tc, tw] = [0] * 3
 
     # Read web_sales
@@ -122,7 +122,7 @@ def q95_stage1(key):
     '''
     Group by order_number and list the unique warehouse_sk for each order_number
     Note: the result is computed from a single parallel task, but obtaining the correct result 
-    needs global information, so stage 2 needs to gather the results of all stage 1's tasks
+    needs global information, so stage 1 needs to gather the results of all stage 0's tasks
     '''
     wh_uniques = ws_s.groupby(['ws_order_number'])['ws_warehouse_sk']
     wh_unique_counts = wh_uniques.nunique()
@@ -152,10 +152,10 @@ def q95_stage1(key):
     return res
 
 
-def q95_stage2(key):
+def q95_stage1(key):
     [tr, tc, tw] = [0] * 3
 
-    # Read stage 1's results
+    # Read stage 0's results
     t0 = time.time()
     wh_uc = read_data(key)
     t1 = time.time()
@@ -181,7 +181,7 @@ def q95_stage2(key):
     return res
 
 
-def q95_stage3(key):
+def q95_stage2(key):
     [tr, tc, tw] = [0] * 3
 
     # Read web_sales
@@ -214,7 +214,7 @@ def q95_stage3(key):
     return res
 
 
-def q95_stage4(key):
+def q95_stage3(key):
     [tr, tc, tw] = [0] * 3
 
     # Read web_returns
@@ -239,15 +239,15 @@ def q95_stage4(key):
     return res
 
 
-def q95_stage5(key):
+def q95_stage4(key):
     [tr, tc, tw] = [0] * 3
 
-    # Read the results from stage 3, 4, 2 and date_dim
+    # Read the results from stage 2, 3, 1 and date_dim
     t0 = time.time()
-    ws = read_data(key, 0)  # stage 3
-    wr = read_data(key, 1)  # stage 4
+    ws = read_data(key, 0)  # stage 2
+    wr = read_data(key, 1)  # stage 3
     d = read_data(key, 2)  # date_dim
-    ws_wh = read_data(key, 3)  # stage 2
+    ws_wh = read_data(key, 3)  # stage 1
     t1 = time.time()
     tr += t1 - t0
 
@@ -282,7 +282,7 @@ def q95_stage5(key):
     return res
 
 
-def q95_stage6(key):
+def q95_stage5(key):
     [tr, tc, tw] = [0] * 3
 
     # Read customer_address
@@ -307,10 +307,10 @@ def q95_stage6(key):
     return res
 
 
-def q95_stage7(key):
+def q95_stage6(key):
     [tr, tc, tw] = [0] * 3
 
-    # Read stage 5 and 6's results and web_site
+    # Read stage 4 and 5's results and web_site
     t0 = time.time()
     ws = read_data(key, 0)
     ca = read_data(key, 1)
@@ -339,10 +339,10 @@ def q95_stage7(key):
     return res
 
 
-def q95_stage8(key):
+def q95_stage7(key):
     [tr, tc, tw] = [0] * 3
 
-    # Read stage 7's results
+    # Read stage 6's results
     t0 = time.time()
     ws_tgt = read_data(key)
     t1 = time.time()
@@ -387,21 +387,21 @@ def invoke_q95_func(event):
     
     func_id = key['func_id']
     if func_id == 0:
-        return q95_stage1(key)
+        return q95_stage0(key)
     elif func_id == 1:
-        return q95_stage2(key)
+        return q95_stage1(key)
     elif func_id == 2:
-        return q95_stage3(key)
+        return q95_stage2(key)
     elif func_id == 3:
-        return q95_stage4(key)
+        return q95_stage3(key)
     elif func_id == 4:
-        return q95_stage5(key)
+        return q95_stage4(key)
     elif func_id == 5:
-        return q95_stage6(key)
+        return q95_stage5(key)
     elif func_id == 6:
-        return q95_stage7(key)
+        return q95_stage6(key)
     elif func_id == 7:
-        return q95_stage8(key)
+        return q95_stage7(key)
     else:
         raise ValueError('Invalid func_id')
 
@@ -410,129 +410,129 @@ if __name__ == "__main__":
     schema = merge_dicts(table_schema, q95_intermediate_schema)
     # local test
 
-    dict_stage1 = {
+    dict_stage0 = {
         'task_id': 2,
         'input_address': 'tpcds/test-1g/web_sales',
         'table_name': 'web_sales',
         'read_pattern': 'read_partial_table',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage0',
         'storage_mode': 's3',
         'num_tasks': 30,
         'func_id': 0
     }
 
-    dict_stage1_local = {
+    dict_stage0_local = {
         'task_id': 0,
         'input_address': '../data/web_sales',
         'table_name': 'web_sales',
         'read_pattern': 'read_partial_table',
-        'output_address': '../data/q95_intermediate/q95_stage1',
+        'output_address': '../data/q95_intermediate/q95_stage0',
         'storage_mode': 'local',
         'num_tasks': 30,
         'func_id': 0
+    }
+
+
+    dict_stage1 = {
+        'task_id': 0,
+        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage0',
+        'table_name': 'stage0',
+        'read_pattern': 'read_multiple_partitions',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
+        'storage_mode': 's3',
+        'num_tasks': 10,
+        'num_partitions': 30,
+        'func_id': 1
+    }
+
+
+    dict_stage1_local = {
+        'task_id': 0,
+        'input_address': '../data/q95_intermediate/q95_stage0',
+        'table_name': 'stage0',
+        'read_pattern': 'read_multiple_partitions',
+        'output_address': '../data/q95_intermediate/q95_stage1',
+        'storage_mode': 'local',
+        'num_tasks': 10,
+        'num_partitions': 30,
+        'func_id': 1
     }
 
 
     dict_stage2 = {
         'task_id': 0,
-        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
-        'table_name': 'stage1',
-        'read_pattern': 'read_multiple_partitions',
+        'input_address': 'tpcds/test-1g/web_sales',
+        'table_name': 'web_sales',
+        'read_pattern': 'read_partial_table',
         'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage2',
         'storage_mode': 's3',
-        'num_tasks': 10,
-        'num_partitions': 30,
-        'func_id': 1
+        'num_tasks': 30,
+        'func_id': 2
     }
 
-
+    
     dict_stage2_local = {
-        'task_id': 0,
-        'input_address': '../data/q95_intermediate/q95_stage1',
-        'table_name': 'stage1',
-        'read_pattern': 'read_multiple_partitions',
-        'output_address': '../data/q95_intermediate/q95_stage2',
-        'storage_mode': 'local',
-        'num_tasks': 10,
-        'num_partitions': 30,
-        'func_id': 1
-    }
-
-
-    dict_stage3 = {
         'task_id': 0,
         'input_address': 'tpcds/test-1g/web_sales',
         'table_name': 'web_sales',
         'read_pattern': 'read_partial_table',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage3',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage2',
         'storage_mode': 's3',
         'num_tasks': 30,
         'func_id': 2
+    }
+
+
+    dict_stage3 = {
+        'task_id': 1,
+        'input_address': 'tpcds/test-1g/web_returns',
+        'table_name': 'web_returns',
+        'read_pattern': 'read_partial_table',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage3',
+        'storage_mode': 's3',
+        'num_tasks': 2,
+        'func_id': 3
     }
 
     
     dict_stage3_local = {
         'task_id': 0,
-        'input_address': 'tpcds/test-1g/web_sales',
-        'table_name': 'web_sales',
-        'read_pattern': 'read_partial_table',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage3',
-        'storage_mode': 's3',
-        'num_tasks': 30,
-        'func_id': 2
-    }
-
-
-    dict_stage4 = {
-        'task_id': 1,
-        'input_address': 'tpcds/test-1g/web_returns',
-        'table_name': 'web_returns',
-        'read_pattern': 'read_partial_table',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage4',
-        'storage_mode': 's3',
-        'num_tasks': 2,
-        'func_id': 3
-    }
-
-    
-    dict_stage4_local = {
-        'task_id': 0,
         'input_address': '../data/web_returns',
         'table_name': 'web_returns',
         'read_pattern': 'read_partial_table',
-        'output_address': '../data/q95_intermediate/q95_stage4',
+        'output_address': '../data/q95_intermediate/q95_stage3',
         'storage_mode': 'local',
         'num_tasks': 2,
         'func_id': 3
     }
 
 
-    dict_stage5 = {
+    dict_stage4 = {
         'task_id': 0,
-        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage3', 
-                        'tpcds/test-1g/q95_intermediate/q95_stage4', 
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage2', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage3', 
                         'tpcds/test-1g/date_dim',
-                        'tpcds/test-1g/q95_intermediate/q95_stage2'],
-        'table_name': ['stage3', 'stage4', 'date_dim', 'stage2'],
+                        'tpcds/test-1g/q95_intermediate/q95_stage1'],
+        'table_name': ['stage2', 'stage3', 'date_dim', 'stage1'],
         'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 
                         'read_table', 'read_all_partitions'],
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage5',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage4',
         'storage_mode': 's3',
         'num_tasks': 30,
         'num_partitions': [30, 2, 1, 1],
         'func_id': 4
     }
 
-    dict_stage5_local = {
+    dict_stage4_local = {
         'task_id': 0,
-        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage3', 
-                        'tpcds/test-1g/q95_intermediate/q95_stage4', 
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage2', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage3', 
                         'tpcds/test-1g/date_dim',
-                        'tpcds/test-1g/q95_intermediate/q95_stage2'],
-        'table_name': ['stage3', 'stage4', 'date_dim', 'stage2'],
+                        'tpcds/test-1g/q95_intermediate/q95_stage1'],
+        'table_name': ['stage2', 'stage3', 'date_dim', 'stage1'],
         'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 
                         'read_table', 'read_all_partitions'],
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage5',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage4',
         'storage_mode': 's3',
         'num_tasks': 30,
         'num_partitions': [30, 2, 1, 1],
@@ -540,66 +540,66 @@ if __name__ == "__main__":
     }
     
 
-    dict_stage6 = {
+    dict_stage5 = {
         'task_id': 0,
         'input_address': 'tpcds/test-1g/customer_address',
         'table_name': 'customer_address',
         'read_pattern': 'read_table',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage6',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage5',
         'storage_mode': 's3',
         'num_tasks': 1,
         'func_id': 5
+    }
+
+    
+    dict_stage5_local = {
+        'task_id': 0,
+        'input_address': '../data/customer_address',
+        'table_name': 'customer_address',
+        'read_pattern': 'read_partial_table',
+        'output_address': '../data/q95_intermediate/q95_stage5',
+        'storage_mode': 'local',
+        'num_tasks': 1,
+        'func_id': 5
+    }
+
+
+    dict_stage6 = {
+        'task_id': 0,
+        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage4', 
+                        'tpcds/test-1g/q95_intermediate/q95_stage5', 
+                        'tpcds/test-1g/web_site'],
+        'table_name': ['stage4', 'stage5', 'web_site'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage6',
+        'storage_mode': 's3',
+        'num_tasks': 1,
+        'num_partitions': [1, 1, 1],
+        'func_id': 6
     }
 
     
     dict_stage6_local = {
         'task_id': 0,
-        'input_address': '../data/customer_address',
-        'table_name': 'customer_address',
-        'read_pattern': 'read_partial_table',
+        'input_address': ['../data/q95_intermediate/q95_stage4', 
+                        '../data/q95_intermediate/q95_stage5', 
+                        '../data/web_site'],
+        'table_name': ['stage4', 'stage5', 'web_site'],
+        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
         'output_address': '../data/q95_intermediate/q95_stage6',
         'storage_mode': 'local',
         'num_tasks': 1,
-        'func_id': 5
+        'num_partitions': [1, 1, 1],
+        'func_id': 6
     }
 
 
     dict_stage7 = {
         'task_id': 0,
-        'input_address': ['tpcds/test-1g/q95_intermediate/q95_stage5', 
-                        'tpcds/test-1g/q95_intermediate/q95_stage6', 
-                        'tpcds/test-1g/web_site'],
-        'table_name': ['stage5', 'stage6', 'web_site'],
-        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage7',
-        'storage_mode': 's3',
-        'num_tasks': 1,
-        'num_partitions': [1, 1, 1],
-        'func_id': 6
-    }
-
-    
-    dict_stage7_local = {
-        'task_id': 0,
-        'input_address': ['../data/q95_intermediate/q95_stage5', 
-                        '../data/q95_intermediate/q95_stage6', 
-                        '../data/web_site'],
-        'table_name': ['stage5', 'stage6', 'web_site'],
-        'read_pattern': ['read_multiple_partitions', 'read_all_partitions', 'read_table'],
-        'output_address': '../data/q95_intermediate/q95_stage7',
-        'storage_mode': 'local',
-        'num_tasks': 1,
-        'num_partitions': [1, 1, 1],
-        'func_id': 6
-    }
-
-
-    dict_stage8 = {
-        'task_id': 0,
-        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage7',
-        'table_name': 'stage7',
+        'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage6',
+        'table_name': 'stage6',
         'read_pattern': 'read_all_partitions',
-        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage8',
+        'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage7',
         'storage_mode': 's3',
         'num_tasks': 1,
         'num_partitions': 1,
@@ -607,12 +607,12 @@ if __name__ == "__main__":
     }
 
 
-    dict_stage8_local = {
+    dict_stage7_local = {
         'task_id': 0,
-        'input_address': '../data/q95_intermediate/q95_stage7',
-        'table_name': 'stage7',
+        'input_address': '../data/q95_intermediate/q95_stage6',
+        'table_name': 'stage6',
         'read_pattern': 'read_all_partitions',
-        'output_address': '../data/q95_intermediate/q95_stage8',
+        'output_address': '../data/q95_intermediate/q95_stage7',
         'storage_mode': 'local',
         'num_tasks': 1,
         'num_partitions': 1,

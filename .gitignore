@@ -184,3 +184,5 @@ cython_debug/
 logs
 **/logs
 TPC-DS/data/*
+**/package
+**.zip
