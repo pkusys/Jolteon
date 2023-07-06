@@ -16,7 +16,7 @@ aws lambda create-function \
 --role arn:aws:iam::325476609965:role/lambda-url-role \
 --runtime python3.10 \
 --timeout 360 \
---memory-size 1024 \
+--memory-size 2048 \
 --handler lambda_function.lambda_handler \
 --zip-file fileb://my_deployment_package.zip
 ```

@@ -112,13 +112,13 @@ def q95_stage0(key):
     t0 = time.time()
     wanted_columns = ['ws_order_number', 'ws_warehouse_sk']
     ws_s = ws[wanted_columns]
-    print('\n\n')
-    print(ws_s.head())
-    print('\n\n')
+    # print('\n\n')
+    # print(ws_s.head())
+    # print('\n\n')
 
-    x = ws_s[ws_s['ws_order_number'] == 0]
-    print(x)
-    print("len input = {}".format(len(ws_s)))
+    # x = ws_s[ws_s['ws_order_number'] == 0]
+    # print(x)
+    # print("len input = {}".format(len(ws_s)))
     '''
     Group by order_number and list the unique warehouse_sk for each order_number
     Note: the result is computed from a single parallel task, but obtaining the correct result 
@@ -136,9 +136,9 @@ def q95_stage0(key):
         'unique_count_flag': (wh_unique_counts > 1).astype(int), 
         'unique_value': wh_uniques.values
     })
-    print('\n\n')
-    print(wh_uc.head())
-    print('\n\n')
+    # print('\n\n')
+    # print(wh_uc.head())
+    # print('\n\n')
     t1 = time.time()
     tc += t1 - t0
 
@@ -412,23 +412,25 @@ if __name__ == "__main__":
 
     dict_stage0 = {
         'task_id': 2,
-        'input_address': 'tpcds/test-1g/web_sales',
-        'table_name': 'web_sales',
-        'read_pattern': 'read_partial_table',
+        'input_address': ['tpcds/test-1g/web_sales'],
+        'table_name': ['web_sales'],
+        'read_pattern': ['read_partial_table'],
         'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage0',
         'storage_mode': 's3',
         'num_tasks': 30,
+        'num_partitions': [1],
         'func_id': 0
     }
 
     dict_stage0_local = {
         'task_id': 0,
-        'input_address': '../data/web_sales',
-        'table_name': 'web_sales',
-        'read_pattern': 'read_partial_table',
+        'input_address': ['../data/web_sales'],
+        'table_name': ['web_sales'],
+        'read_pattern': ['read_partial_table'],
         'output_address': '../data/q95_intermediate/q95_stage0',
         'storage_mode': 'local',
-        'num_tasks': 30,
+        'num_tasks': 1,
+        'num_partitions': [1],
         'func_id': 0
     }
 
@@ -620,6 +622,6 @@ if __name__ == "__main__":
     }
 
 
-    res = invoke_q95_func(dict_stage5_local)
+    res = invoke_q95_func(dict_stage0_local)
     print('\n\n')
     print(res)

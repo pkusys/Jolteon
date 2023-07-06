@@ -528,7 +528,7 @@ def get_pd_type(typename):
     raise Exception("Not supported type in pandas: " + typename)
 
 def pd_tpye_to_np_type(pd_type):
-    return str(pd_type)
+    return str(pd_type).lower()
     # if pd_type == pd.Int32Dtype():
     #     return 'Int32'
     # if pd_type == pd.Int64Dtype():
