@@ -42,7 +42,7 @@ class Stage:
         self.pool = Pool(self.pool_size)
         # self.boto3_client = boto3.client('lambda')
     
-    def change_pool_size(new_size):
+    def change_pool_size(self, new_size):
         assert isinstance(new_size, int)
         self.pool.close()
         self.pool.join
@@ -118,8 +118,6 @@ class Stage:
         assert self.status == Status.RUNNING
         
         # self.status = Status.RUNNING
-            
-        num_vcpu = cpu_count()
         
         prefix = ''
         input_address = []

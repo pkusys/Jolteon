@@ -1,7 +1,6 @@
 from stage import Stage, Status
 import json
-from utils import MyThread
-from multiprocessing import Pool
+from utils import MyThread, MyProcess
 import time
 
 class Workflow:
@@ -17,8 +16,6 @@ class Workflow:
         
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
-        
-        self.pool = Pool(len(self.stages))
     
     def parse_config(self, config) -> None:
         num = config['num_stages']
@@ -96,11 +93,14 @@ class Workflow:
                 continue
             
             for child in stage.children:
+                is_ready = True
                 if child.status == Status.WAITING:
                     for parent in child.parents:
                         if parent.status != Status.FINISHED:
+                            is_ready = False
                             break
-                    child.status = Status.READY
+                    if not is_ready:
+                        child.status = Status.READY
             
     
     def lazy_execute(self):
@@ -144,8 +144,7 @@ class Workflow:
         return self_dict
     
     def __del__(self):
-        self.pool.close()
-        self.pool.join
+        pass
 
 
 if __name__ == '__main__':
