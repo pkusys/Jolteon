@@ -150,9 +150,21 @@ class Workflow:
 if __name__ == '__main__':
     wf = Workflow( './config.json')
     stage = wf.stages[0]
+    stage.num_func = 32
+    
+    stage = wf.stages[1]
+    stage.num_func = 16
+    
+    stage = wf.stages[2]
+    stage.num_func = 16
+    
+    stage = wf.stages[3]
+    stage.num_func = 16
+    
+    stage = wf.stages[4]
     print(wf.workflow_name, stage)
     stage.status = Status.RUNNING
-    stage.num_func = 32
+    stage.num_func = 16
     
     t1 = time.time()
     thread = MyThread(target=stage.execute, args=None)
@@ -165,6 +177,9 @@ if __name__ == '__main__':
     print(t2 - t1)
     for result in res:
         rd = json.loads(result[0])
+        print(rd)
+        if 'statusCode' not in rd:
+            print(rd)
         rd = json.loads(rd['body'])
         print(rd['breakdown'])
         

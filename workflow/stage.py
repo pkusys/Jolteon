@@ -7,10 +7,15 @@ import base64
 from enum import Enum
 import time
 
+# extrace stage from /tpcds/stage/intermediate
 def extract_name(name):
     assert isinstance(name, str)
     result = name.rpartition('/')
     extracted_string = result[2]
+    if extracted_string == 'intermediate':
+        extracted_string = result[0]
+        result = extracted_string.rpartition('/')
+        extracted_string = result[2]
     return extracted_string
 
 class Status(Enum):
