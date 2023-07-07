@@ -1,5 +1,8 @@
-from stage import Stage
+from stage import Stage, Status
 import json
+from utils import MyThread
+from multiprocessing import Pool
+import time
 
 class Workflow:
     def __init__(self, config_file, boto3_client_ = None) -> None:
@@ -14,12 +17,14 @@ class Workflow:
         
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
+        
+        self.pool = Pool(len(self.stages))
     
     def parse_config(self, config) -> None:
         num = config['num_stages']
         self.workflow_name = config['workflow_name']
         for i in range(num):
-            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i, self.boto3_client)
+            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i)
             self.stages.append(stage)
             
         for index, stage in enumerate(self.stages):
@@ -47,6 +52,9 @@ class Workflow:
 
             if len(stage.children) == 0:
                 self.sinks.append(stage)
+                
+        for stage in self.sources:
+            stage.status = Status.READY
         
         # check Directed Acyclic Graph
         assert self.check_dag()
@@ -69,10 +77,97 @@ class Workflow:
                     queue.append(child)
                     
         return count >= len(self.stages)
+    
+    def check_finished(self, threads):
+        assert isinstance(threads, list)
+        
+        for ids, thread in enumerate(threads):
+            if thread is not None and not thread.is_alive():
+                self.stages[ids].status = Status.FINISHED
+        
+        for stage in self.stages:
+            if stage.status != Status.FINISHED:
+                return False
+        return True
+    
+    def update_stage_status(self):
+        for stage in self.stages:
+            if stage.status != Status.FINISHED:
+                continue
+            
+            for child in stage.children:
+                if child.status == Status.WAITING:
+                    for parent in child.parents:
+                        if parent.status != Status.FINISHED:
+                            break
+                    child.status = Status.READY
+            
+    
+    def lazy_execute(self):
+        # Stage info is only changed in main thread
+        threads = [None for i in range(len(self.stages))]
+        
+        while not self.check_finished(threads):
+            stage = None
+            for s in self.stages:
+                if s.status == Status.READY:
+                    stage = s
+                    break
+            if stage is None:
+                self.update_stage_status()
+                continue
+            stage.status = Status.RUNNING
+            thread = MyThread(target=stage.execute, args=None)
+            threads[stage.stage_id] = thread
+            thread.start()
+            
+            self.update_stage_status()
+            
+        for thread in threads:
+            assert not thread.is_alive()
+            
+        res_list = []
+        for thread in threads:
+            res_list.append(thread.result)
+            
+        return res_list
+    
+    def timeline_execute(self):
+        raise NotImplementedError
+    
+    def eager_execute(self):
+        raise NotImplementedError
+    
+    def __getstate__(self):
+        self_dict = self.__dict__.copy()
+        del self_dict['pool']
+        return self_dict
+    
+    def __del__(self):
+        self.pool.close()
+        self.pool.join
 
 
 if __name__ == '__main__':
     wf = Workflow( './config.json')
-    print(wf.workflow_name, wf.stages[0])
-    print(wf.stages[0].execute())
+    stage = wf.stages[0]
+    print(wf.workflow_name, stage)
+    stage.status = Status.RUNNING
+    stage.num_func = 32
+    
+    t1 = time.time()
+    thread = MyThread(target=stage.execute, args=None)
+    thread.start()
+    thread.join()
+    res = thread.result
+    # res = stage.execute()
+    t2 = time.time()
+    print('Number of functions:', stage.num_func)
+    print(t2 - t1)
+    for result in res:
+        rd = json.loads(result[0])
+        rd = json.loads(rd['body'])
+        print(rd['breakdown'])
+        
+    print('\n\n')
     

@@ -1,8 +1,11 @@
 import boto3
 from multiprocessing.pool import ThreadPool
 from multiprocessing import cpu_count
+from multiprocessing import Pool
 import json
 import base64
+from enum import Enum
+import time
 
 def extract_name(name):
     assert isinstance(name, str)
@@ -10,16 +13,23 @@ def extract_name(name):
     extracted_string = result[2]
     return extracted_string
 
+class Status(Enum):
+    WAITING = 0
+    READY = 1
+    RUNNING = 2
+    FINISHED = 3
+
 class Stage:
-    def __init__(self, workflow_name_, stage_name_, stage_id_, func_name_ = None, boto3_client_ = None) -> None:
+    def __init__(self, workflow_name_, stage_name_, stage_id_, func_name_ = None) -> None:
         assert isinstance(stage_name_, str)
         assert isinstance(stage_id_, int)
         
         self.stage_name = stage_name_
         self.stage_id = stage_id_
-        self.boto3_client = boto3_client_
         self.func_name = func_name_
         self.workflow_name = workflow_name_
+        
+        self.status = Status.WAITING
         
         self.num_func = 1
         self.config = {'memory': 1024, 'timeout': 360}
@@ -28,6 +38,17 @@ class Stage:
         self.parents = []
         self.input_files = []
         self.read_pattern = []
+        self.pool_size = 64
+        self.pool = Pool(self.pool_size)
+        # self.boto3_client = boto3.client('lambda')
+    
+    def change_pool_size(new_size):
+        assert isinstance(new_size, int)
+        self.pool.close()
+        self.pool.join
+        
+        self.pool_size = new_size
+        self.pool = Pool(self.pool_size)
         
     def add_child(self, child):
         self.children.append(child)
@@ -45,10 +66,9 @@ class Stage:
             wn = self.workflow_name.replace('/', '-')
             self.func_name = wn + '-' + self.stage_name
             
-        if self.boto3_client is None:
-            self.boto3_client = boto3.client('lambda')
+        boto3_client = boto3.client('lambda')
             
-        response = self.boto3_client.update_function_configuration(
+        response = boto3_client.update_function_configuration(
             FunctionName=self.func_name,
             MemorySize=self.config['memory'],
             Timeout=self.config['timeout']
@@ -64,25 +84,23 @@ class Stage:
             wn = self.workflow_name.replace('/', '-')
             self.func_name = wn + '-' + self.stage_name
             
-        if self.boto3_client is None:
-            self.boto3_client = boto3.client('lambda')
-            
         raise Exception("Please register lambda function through AWS CLI with preinstalled dependencies.")
     
     def invoke_lambda(self, payload):
         if self.func_name is None:
             wn = self.workflow_name.replace('/', '-')
             self.func_name = wn + '-' + self.stage_name
-            
-        if self.boto3_client is None:
-            self.boto3_client = boto3.client('lambda')
-            
-        response = self.boto3_client.invoke(
+
+        boto3_client = boto3.client('lambda')
+        
+        t0 = time.time()
+        response = boto3_client.invoke(
             # FunctionName='tpcds-96-stage1',
             FunctionName=self.func_name,
             LogType='Tail',
             Payload=json.dumps(payload),
         )
+        t1 = time.time()
         
         log_result = response['ResponseMetadata']['HTTPHeaders']['x-amz-log-result']
         log_result = base64.b64decode(log_result)
@@ -90,14 +108,16 @@ class Stage:
         
         resp_payload = response['Payload'].read()
         resp_payload = resp_payload.decode('utf8')
+
+        print('Lambda invocation time: ', t1 - t0)
         
         return [resp_payload, log_result]
         
     def execute(self):
         assert self.num_func > 0
+        assert self.status == Status.RUNNING
         
-        if self.boto3_client is None:
-            self.boto3_client = boto3.client('lambda')
+        # self.status = Status.RUNNING
             
         num_vcpu = cpu_count()
         
@@ -148,15 +168,30 @@ class Stage:
             payload_cp = payload.copy()
             payload_cp['task_id'] = i
             payload_list.append(payload_cp)
+            
+        t0 = time.time()
         
-        t_pool = ThreadPool(num_vcpu)
+        t_pool = self.pool
         
         ret_list = t_pool.map(self.invoke_lambda, payload_list)
         
-        t_pool.close()
-        t_pool.join()
+        t1 = time.time()
+        
+        print('Funtion invocation time: ', t1 - t0, 's')
+        
+        # move it to workflow execution for thread safety
+        # self.status = Status.FINISHED
         
         return ret_list
     
     def __str__(self):
         return self.stage_name
+    
+    def __getstate__(self):
+        self_dict = self.__dict__.copy()
+        del self_dict['pool']
+        return self_dict
+    
+    def __del__(self):
+        self.pool.close()
+        self.pool.join
