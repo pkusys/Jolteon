@@ -79,8 +79,10 @@ class Workflow:
         assert isinstance(threads, list)
         
         for ids, thread in enumerate(threads):
-            if thread is not None and not thread.is_alive():
-                self.stages[ids].status = Status.FINISHED
+            if self.stages[ids].status == Status.RUNNING:
+                if thread is not None and not thread.is_alive():
+                    print('Stage', ids, 'finished')
+                    self.stages[ids].status = Status.FINISHED
         
         for stage in self.stages:
             if stage.status != Status.FINISHED:
@@ -89,18 +91,18 @@ class Workflow:
     
     def update_stage_status(self):
         for stage in self.stages:
-            if stage.status != Status.FINISHED:
-                continue
-            
-            for child in stage.children:
+            if stage.status == Status.WAITING:
                 is_ready = True
-                if child.status == Status.WAITING:
-                    for parent in child.parents:
-                        if parent.status != Status.FINISHED:
-                            is_ready = False
-                            break
-                    if not is_ready:
-                        child.status = Status.READY
+                for p in stage.parents:
+                    if p.status != Status.FINISHED:
+                        is_ready = False
+                        break
+                if is_ready:
+                    stage.status = Status.READY
+                    
+        # for s in self.stages:
+        #     print(s.stage_id, ':' , s.status, end=' ')
+        # print()
             
     
     def lazy_execute(self):
@@ -116,6 +118,7 @@ class Workflow:
             if stage is None:
                 self.update_stage_status()
                 continue
+            # print('Stage', stage.stage_id, 'is starting')
             stage.status = Status.RUNNING
             thread = MyThread(target=stage.execute, args=None)
             threads[stage.stage_id] = thread
@@ -197,7 +200,26 @@ if __name__ == '__main__':
             
         print('\n\n')
     elif test_mode == 'lazy':
-        pass
-    
+        wf = Workflow( './config.json')
+        wf.stages[0].num_func = 8
+        wf.stages[1].num_func = 1
+        wf.stages[2].num_func = 8
+        wf.stages[3].num_func = 8
+        wf.stages[4].num_func = 8
+        wf.stages[5].num_func = 1
+        wf.stages[6].num_func = 8
+        wf.stages[7].num_func = 1
+        t1 = time.time()
+        res = wf.lazy_execute()
+        t2 = time.time()
+        print('Time:', t2 - t1)
+        # for ids, r in enumerate(res):
+        #     for result in r:
+        #         rd = json.loads(result[0])
+        #         # print(rd)
+        #         if 'statusCode' not in rd:
+        #             print(rd)
+        #         rd = json.loads(rd['body'])
+        #         print(ids, rd['breakdown'])
     else:
         raise NotImplementedError

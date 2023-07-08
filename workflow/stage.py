@@ -114,7 +114,7 @@ class Stage:
         resp_payload = response['Payload'].read()
         resp_payload = resp_payload.decode('utf8')
 
-        print('Lambda invocation time: ', t1 - t0)
+        # print('Lambda invocation time: ', t1 - t0)
         
         return [resp_payload, log_result]
         
@@ -180,7 +180,7 @@ class Stage:
         
         t1 = time.time()
         
-        print('Funtion invocation time: ', t1 - t0, 's')
+        print(self.stage_id, 'Funtion invocation time: ', t1 - t0, 's')
         
         # move it to workflow execution for thread safety
         # self.status = Status.FINISHED
