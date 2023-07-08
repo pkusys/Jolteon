@@ -857,7 +857,7 @@ def get_start_end_index(task_id, num_tasks, num_partitions):
     if task_id >= num_tasks:
         # read all partitions
         assert num_tasks == 1
-        return 0, num_partitions - 1
+        return 0, num_partitions
         
     num_parts_per_task = num_partitions // num_tasks
     num_remain_parts = num_partitions % num_tasks

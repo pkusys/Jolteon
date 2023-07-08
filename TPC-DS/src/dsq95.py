@@ -163,10 +163,12 @@ def q95_stage1(key):
 
     # Reduced groupby, including unique_count_flag == 1 or unique_value > 1
     t0 = time.time()
-    target_ = wh_uc.groupby('ws_order_number') \
-                   .filter(lambda x: (x['unique_count_flag'].max() == 1) or 
-                                     (x['unique_count_flag'].max() == 0 and 
-                                      x['unique_value'].nunique() > 1))
+    
+    condition1 = wh_uc.groupby('ws_order_number')['unique_count_flag'].transform('max') == 1
+    
+    condition2 = (wh_uc.groupby('ws_order_number')['unique_count_flag'].transform('max') == 0) & (wh_uc.groupby('ws_order_number')['unique_value'].transform('nunique') > 1)
+    target_ = wh_uc[condition1 | condition2]
+                   
     target_order_number = pd.DataFrame(target_['ws_order_number'].drop_duplicates())
     t1 = time.time()
     tc += t1 - t0
@@ -439,10 +441,10 @@ if __name__ == "__main__":
         'task_id': 0,
         'input_address': 'tpcds/test-1g/q95_intermediate/q95_stage0',
         'table_name': 'stage0',
-        'read_pattern': 'read_multiple_partitions',
+        'read_pattern': 'read_all_partitions',
         'output_address': 'tpcds/test-1g/q95_intermediate/q95_stage1',
         'storage_mode': 's3',
-        'num_tasks': 10,
+        'num_tasks': 1,
         'num_partitions': 30,
         'func_id': 1
     }
@@ -450,13 +452,13 @@ if __name__ == "__main__":
 
     dict_stage1_local = {
         'task_id': 0,
-        'input_address': '../data/q95_intermediate/q95_stage0',
-        'table_name': 'stage0',
-        'read_pattern': 'read_multiple_partitions',
+        'input_address': ['../data/q95_intermediate/q95_stage0'],
+        'table_name': ['stage0'],
+        'read_pattern': ['read_all_partitions'],
         'output_address': '../data/q95_intermediate/q95_stage1',
         'storage_mode': 'local',
         'num_tasks': 10,
-        'num_partitions': 30,
+        'num_partitions': [1],
         'func_id': 1
     }
 
@@ -622,6 +624,6 @@ if __name__ == "__main__":
     }
 
 
-    res = invoke_q95_func(dict_stage0_local)
+    res = invoke_q95_func(dict_stage1_local)
     print('\n\n')
     print(res)

@@ -148,40 +148,56 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    wf = Workflow( './config.json')
-    stage = wf.stages[0]
-    stage.num_func = 32
+    test_mode = 'lazy' # 'step_by_step' 'lazy'
     
-    stage = wf.stages[1]
-    stage.num_func = 16
-    
-    stage = wf.stages[2]
-    stage.num_func = 16
-    
-    stage = wf.stages[3]
-    stage.num_func = 16
-    
-    stage = wf.stages[4]
-    print(wf.workflow_name, stage)
-    stage.status = Status.RUNNING
-    stage.num_func = 16
-    
-    t1 = time.time()
-    thread = MyThread(target=stage.execute, args=None)
-    thread.start()
-    thread.join()
-    res = thread.result
-    # res = stage.execute()
-    t2 = time.time()
-    print('Number of functions:', stage.num_func)
-    print(t2 - t1)
-    for result in res:
-        rd = json.loads(result[0])
-        print(rd)
-        if 'statusCode' not in rd:
-            print(rd)
-        rd = json.loads(rd['body'])
-        print(rd['breakdown'])
+    if test_mode == 'step_by_step':
+        wf = Workflow( './config.json')
+        stage = wf.stages[0]
+        stage.num_func = 16
         
-    print('\n\n')
+        stage = wf.stages[1]
+        stage.num_func = 1
+        
+        stage = wf.stages[2]
+        stage.num_func = 16
+        
+        stage = wf.stages[3]
+        stage.num_func = 16
+        
+        stage = wf.stages[4]
+        stage.num_func = 16
+        
+        stage = wf.stages[5]
+        stage.num_func = 16
+        
+        stage = wf.stages[6]
+        stage.num_func = 16
+        
+        stage = wf.stages[7]
+        print(wf.workflow_name, stage)
+        stage.status = Status.RUNNING
+        stage.num_func = 1
+        
+        t1 = time.time()
+        thread = MyThread(target=stage.execute, args=None)
+        thread.start()
+        thread.join()
+        res = thread.result
+        # res = stage.execute()
+        t2 = time.time()
+        print('Number of functions:', stage.num_func)
+        print(t2 - t1)
+        for result in res:
+            rd = json.loads(result[0])
+            print(rd)
+            if 'statusCode' not in rd:
+                print(rd)
+            rd = json.loads(rd['body'])
+            print(rd['breakdown'])
+            
+        print('\n\n')
+    elif test_mode == 'lazy':
+        pass
     
+    else:
+        raise NotImplementedError

@@ -13,7 +13,7 @@
         "parents": [0],
         "children": [4],
         "input_files": ["tpcds/dsq95/stage0/intermediate"],
-        "read_pattern": ["read_multiple_partitions"]
+        "read_pattern": ["read_all_partitions"]
     },
     "2": {
         "stage_name": "stage2",
