@@ -596,7 +596,7 @@ def read_local_table(key):
                               dtype=dtypes, 
                               na_values='-')
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
     
     fill_dict = {}
     for k, v in dtypes.items():
@@ -635,7 +635,7 @@ def read_s3_table(key, s3_client=None):
                               dtype=dtypes, 
                               na_values = "-")
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
 
     fill_dict = {}
     for k, v in dtypes.items():
@@ -676,7 +676,7 @@ def read_local_partial_table(key, index, partitions):
                               na_values='-',
                             #   parse_dates=parse_dates,
                               skiprows=lambda x: x < start_row or x > end_row)
-    print(part_data.info())
+    # print(part_data.info())
     
     fill_dict = {}
     for k, v in dtypes.items():
@@ -757,7 +757,7 @@ def read_s3_partial_table(key, index, partitions, s3_client=None):
                               dtype=dtypes, 
                               na_values = "-")
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
 
     fill_dict = {}
     for k, v in dtypes.items():

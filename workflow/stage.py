@@ -43,6 +43,9 @@ class Stage:
         self.parents = []
         self.input_files = []
         self.read_pattern = []
+        
+        self.allow_parallel = True
+        
         self.pool_size = 64
         self.pool = Pool(self.pool_size)
         # self.boto3_client = boto3.client('lambda')
@@ -119,8 +122,11 @@ class Stage:
         return [resp_payload, log_result]
         
     def execute(self):
-        assert self.num_func > 0
         assert self.status == Status.RUNNING
+        if not self.allow_parallel:
+            assert self.num_func == 1
+        else:
+            assert self.num_func > 0
         
         # self.status = Status.RUNNING
         
@@ -180,7 +186,9 @@ class Stage:
         
         t1 = time.time()
         
-        print(self.stage_id, 'Funtion invocation time: ', t1 - t0, 's')
+        # print(self.stage_id, 'Funtion invocation time: ', t1 - t0, 's')
+        
+        ret_list.insert(0, t1 - t0)
         
         # move it to workflow execution for thread safety
         # self.status = Status.FINISHED
