@@ -1,7 +1,6 @@
 from stage import Stage, Status
 import json
-from utils import MyThread
-from multiprocessing import Pool
+from utils import MyThread, MyProcess, extract_info_from_log
 import time
 
 class Workflow:
@@ -17,8 +16,6 @@ class Workflow:
         
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
-        
-        self.pool = Pool(len(self.stages))
     
     def parse_config(self, config) -> None:
         num = config['num_stages']
@@ -30,6 +27,11 @@ class Workflow:
         for index, stage in enumerate(self.stages):
             stage.input_files = config[str(index)]['input_files']
             stage.read_pattern = config[str(index)]['read_pattern']
+            if 'allow_parallel' in config[str(index)]:
+                if config[str(index)]['allow_parallel'] == 'false' or\
+                    config[str(index)]['allow_parallel'] == 'False':
+                        stage.allow_parallel = False
+                        
             parents = config[str(index)]['parents']
             for p in parents:
                 stage.add_parent(self.stages[p])
@@ -82,8 +84,10 @@ class Workflow:
         assert isinstance(threads, list)
         
         for ids, thread in enumerate(threads):
-            if thread is not None and not thread.is_alive():
-                self.stages[ids].status = Status.FINISHED
+            if self.stages[ids].status == Status.RUNNING:
+                if thread is not None and not thread.is_alive():
+                    # print('Stage', ids, 'finished')
+                    self.stages[ids].status = Status.FINISHED
         
         for stage in self.stages:
             if stage.status != Status.FINISHED:
@@ -92,15 +96,18 @@ class Workflow:
     
     def update_stage_status(self):
         for stage in self.stages:
-            if stage.status != Status.FINISHED:
-                continue
-            
-            for child in stage.children:
-                if child.status == Status.WAITING:
-                    for parent in child.parents:
-                        if parent.status != Status.FINISHED:
-                            break
-                    child.status = Status.READY
+            if stage.status == Status.WAITING:
+                is_ready = True
+                for p in stage.parents:
+                    if p.status != Status.FINISHED:
+                        is_ready = False
+                        break
+                if is_ready:
+                    stage.status = Status.READY
+                    
+        # for s in self.stages:
+        #     print(s.stage_id, ':' , s.status, end=' ')
+        # print()
             
     
     def lazy_execute(self):
@@ -116,6 +123,13 @@ class Workflow:
             if stage is None:
                 self.update_stage_status()
                 continue
+            # is_running = False
+            # for s in self.stages:
+            #     if s.status == Status.RUNNING:
+            #         is_running = True
+            #         break
+            # if is_running:
+            #     continue
             stage.status = Status.RUNNING
             thread = MyThread(target=stage.execute, args=None)
             threads[stage.stage_id] = thread
@@ -144,30 +158,104 @@ class Workflow:
         return self_dict
     
     def __del__(self):
-        self.pool.close()
-        self.pool.join
+        pass
 
 
 if __name__ == '__main__':
-    wf = Workflow( './config.json')
-    stage = wf.stages[0]
-    print(wf.workflow_name, stage)
-    stage.status = Status.RUNNING
-    stage.num_func = 32
+    test_mode = 'step_by_step' # 'step_by_step' 'lazy'
     
-    t1 = time.time()
-    thread = MyThread(target=stage.execute, args=None)
-    thread.start()
-    thread.join()
-    res = thread.result
-    # res = stage.execute()
-    t2 = time.time()
-    print('Number of functions:', stage.num_func)
-    print(t2 - t1)
-    for result in res:
-        rd = json.loads(result[0])
-        rd = json.loads(rd['body'])
-        print(rd['breakdown'])
+    if test_mode == 'step_by_step':
+        wf = Workflow( './config.json')
+        stage = wf.stages[0]
+        stage.num_func = 16
         
-    print('\n\n')
-    
+        stage = wf.stages[1]
+        stage.num_func = 1
+        
+        stage = wf.stages[2]
+        stage.num_func = 16
+        
+        stage = wf.stages[3]
+        stage.num_func = 16
+        
+        stage = wf.stages[4]
+        stage.num_func = 16
+        
+        stage = wf.stages[5]
+        stage.num_func = 16
+        
+        stage = wf.stages[6]
+        stage.num_func = 16
+        
+        stage = wf.stages[0]
+        print(wf.workflow_name, stage)
+        stage.status = Status.RUNNING
+        stage.num_func = 64
+        
+        t1 = time.time()
+        thread = MyThread(target=stage.execute, args=None)
+        thread.start()
+        thread.join()
+        res = thread.result
+        # res = stage.execute()
+        t2 = time.time()
+        print('Number of functions:', stage.num_func)
+        print(t2 - t1)
+        for idx, result in enumerate(res):
+            if idx == 0:
+                continue
+            rd = json.loads(result[0])
+            print(rd)
+            if 'statusCode' not in rd:
+                print(rd)
+            rd = json.loads(rd['body'])
+            print(rd['breakdown'])
+            
+        print('\n\n')
+    elif test_mode == 'lazy':
+        wf = Workflow( './config.json')
+        wf.stages[0].num_func = 20
+        wf.stages[1].num_func = 1
+        wf.stages[2].num_func = 20
+        wf.stages[3].num_func = 20
+        wf.stages[4].num_func = 20
+        wf.stages[5].num_func = 20
+        wf.stages[6].num_func = 20
+        wf.stages[7].num_func = 1
+        for stage in wf.stages:
+            print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')
+        print()
+        t1 = time.time()
+        res = wf.lazy_execute()
+        t2 = time.time()
+        print('Time:', t2 - t1)
+        infos = []
+        time_list = []
+        times_list = []
+        for ids, r in enumerate(res):
+            l = []
+            for ids_, result in enumerate(r):
+                if ids_ == 0:
+                    time_list.append(result)
+                    continue
+                info = extract_info_from_log(result[1])
+                infos.append(info)
+                
+                rd = json.loads(result[0])
+                if 'statusCode' not in rd:
+                    print(rd)
+                rd = json.loads(rd['body'])
+                l.append(rd['breakdown'][-1])
+            times_list.append(l)
+        cost = 0
+        for info in infos:
+            cost += info['bill']
+        print('Cost:', cost, '$')
+        for idx, t in enumerate(time_list):
+            print('Stage', idx, 'time:', t)
+            print(times_list[idx])
+        print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
+              + time_list[4] + time_list[6] + time_list[7])
+        print('\n\n')
+    else:
+        raise NotImplementedError

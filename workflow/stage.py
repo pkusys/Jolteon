@@ -7,10 +7,15 @@ import base64
 from enum import Enum
 import time
 
+# extrace stage from /tpcds/stage/intermediate
 def extract_name(name):
     assert isinstance(name, str)
     result = name.rpartition('/')
     extracted_string = result[2]
+    if extracted_string == 'intermediate':
+        extracted_string = result[0]
+        result = extracted_string.rpartition('/')
+        extracted_string = result[2]
     return extracted_string
 
 class Status(Enum):
@@ -38,11 +43,14 @@ class Stage:
         self.parents = []
         self.input_files = []
         self.read_pattern = []
+        
+        self.allow_parallel = True
+        
         self.pool_size = 64
         self.pool = Pool(self.pool_size)
         # self.boto3_client = boto3.client('lambda')
     
-    def change_pool_size(new_size):
+    def change_pool_size(self, new_size):
         assert isinstance(new_size, int)
         self.pool.close()
         self.pool.join
@@ -109,17 +117,18 @@ class Stage:
         resp_payload = response['Payload'].read()
         resp_payload = resp_payload.decode('utf8')
 
-        print('Lambda invocation time: ', t1 - t0)
+        # print('Lambda invocation time: ', t1 - t0)
         
         return [resp_payload, log_result]
         
     def execute(self):
-        assert self.num_func > 0
         assert self.status == Status.RUNNING
+        if not self.allow_parallel:
+            assert self.num_func == 1
+        else:
+            assert self.num_func > 0
         
         # self.status = Status.RUNNING
-            
-        num_vcpu = cpu_count()
         
         prefix = ''
         input_address = []
@@ -177,7 +186,9 @@ class Stage:
         
         t1 = time.time()
         
-        print('Funtion invocation time: ', t1 - t0, 's')
+        # print(self.stage_id, 'Funtion invocation time: ', t1 - t0, 's')
+        
+        ret_list.insert(0, t1 - t0)
         
         # move it to workflow execution for thread safety
         # self.status = Status.FINISHED

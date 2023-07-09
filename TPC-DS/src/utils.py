@@ -596,7 +596,7 @@ def read_local_table(key):
                               dtype=dtypes, 
                               na_values='-')
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
     
     fill_dict = {}
     for k, v in dtypes.items():
@@ -635,7 +635,7 @@ def read_s3_table(key, s3_client=None):
                               dtype=dtypes, 
                               na_values = "-")
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
 
     fill_dict = {}
     for k, v in dtypes.items():
@@ -676,7 +676,7 @@ def read_local_partial_table(key, index, partitions):
                               na_values='-',
                             #   parse_dates=parse_dates,
                               skiprows=lambda x: x < start_row or x > end_row)
-    print(part_data.info())
+    # print(part_data.info())
     
     fill_dict = {}
     for k, v in dtypes.items():
@@ -757,7 +757,7 @@ def read_s3_partial_table(key, index, partitions, s3_client=None):
                               dtype=dtypes, 
                               na_values = "-")
                             #   parse_dates=parse_dates)
-    print(part_data.info())
+    # print(part_data.info())
 
     fill_dict = {}
     for k, v in dtypes.items():
@@ -854,6 +854,11 @@ def read_s3_intermediate(key, s3_client=None):
 # Used for reading multiple partitions, not used for all-to-all shuffle 
 def get_start_end_index(task_id, num_tasks, num_partitions):
     assert num_partitions >= num_tasks
+    if task_id >= num_tasks:
+        # read all partitions
+        assert num_tasks == 1
+        return 0, num_partitions
+        
     num_parts_per_task = num_partitions // num_tasks
     num_remain_parts = num_partitions % num_tasks
     if task_id < num_remain_parts:
@@ -878,7 +883,7 @@ def read_local_multiple_partitions(key):
     return pd.concat(ds)
 
 
-def read_s3_multiple_partitions(key, threadpool=True):
+def read_s3_multiple_partitions(key, threadpool=False):
     start_index, end_index = get_start_end_index(key['task_id'], key['num_tasks'], key['num_partitions'])
     k = {}
     k['column_names'] = key['column_names']
@@ -891,7 +896,7 @@ def read_s3_multiple_partitions(key, threadpool=True):
         def read_work(partition_index):
             k['input_address'] = key['input_address'] + '_' + str(partition_index) + key['suffix']
             d = read_s3_intermediate(k, s3_client)
-            ds[partition_index] = d
+            ds[partition_index - start_index] = d
         
         read_pool = ThreadPool(1)
         read_pool.map(read_work, range(start_index, end_index))
@@ -901,7 +906,7 @@ def read_s3_multiple_partitions(key, threadpool=True):
         for i in range(start_index, end_index):
             k['input_address'] = key['input_address'] + '_' + str(i) + key['suffix']
             d = read_s3_intermediate(k, s3_client)
-            ds[i] = d
+            ds[i - start_index] = d
 
     return pd.concat(ds)
 

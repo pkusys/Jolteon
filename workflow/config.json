@@ -12,8 +12,9 @@
         "stage_name": "stage1",
         "parents": [0],
         "children": [4],
+        "allow_parallel": "false",
         "input_files": ["tpcds/dsq95/stage0/intermediate"],
-        "read_pattern": ["read_multiple_partitions"]
+        "read_pattern": ["read_all_partitions"]
     },
     "2": {
         "stage_name": "stage2",
@@ -41,7 +42,7 @@
         "parents": [],
         "children": [6],
         "input_files": ["tpcds/customer_address"],
-        "read_pattern": ["read_table"]
+        "read_pattern": ["read_partial_table"]
     },
     "6":{
         "stage_name": "stage6",
@@ -54,6 +55,7 @@
         "stage_name": "stage7",
         "parents": [6],
         "children": [],
+        "allow_parallel": "false",
         "input_files": ["tpcds/dsq95/stage6/intermediate"],
         "read_pattern": ["read_all_partitions"]
     }
