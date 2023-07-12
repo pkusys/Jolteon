@@ -162,7 +162,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'step_by_step' # 'step_by_step' 'lazy'
+    test_mode = 'lazy' # 'step_by_step' 'lazy'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './config.json')
@@ -214,13 +214,13 @@ if __name__ == '__main__':
         print('\n\n')
     elif test_mode == 'lazy':
         wf = Workflow( './config.json')
-        wf.stages[0].num_func = 20
+        wf.stages[0].num_func = 8
         wf.stages[1].num_func = 1
-        wf.stages[2].num_func = 20
-        wf.stages[3].num_func = 20
-        wf.stages[4].num_func = 20
-        wf.stages[5].num_func = 20
-        wf.stages[6].num_func = 20
+        wf.stages[2].num_func = 8
+        wf.stages[3].num_func = 1
+        wf.stages[4].num_func = 8
+        wf.stages[5].num_func = 1
+        wf.stages[6].num_func = 8
         wf.stages[7].num_func = 1
         for stage in wf.stages:
             print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')
@@ -245,7 +245,7 @@ if __name__ == '__main__':
                 if 'statusCode' not in rd:
                     print(rd)
                 rd = json.loads(rd['body'])
-                l.append(rd['breakdown'][-1])
+                l.append(rd['breakdown'])
             times_list.append(l)
         cost = 0
         for info in infos:
