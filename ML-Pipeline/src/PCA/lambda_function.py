@@ -15,26 +15,29 @@ import io
 import boto3
 from boto3.s3.transfer import TransferConfig
 
-s3_client = boto3.client('s3')
-bucket_name = 'serverless-bound'
-config = TransferConfig(use_threads=False)
-filename = "/tmp/Digits_Test.txt"
-f = open(filename, "wb")
-s3_client.download_fileobj(bucket_name, "ML_Pipeline/Digits_Test_Small.txt" , f, Config=config)
-f.close()
-print("Init download ###########################")
+# s3_client = boto3.client('s3')
+# bucket_name = 'serverless-bound'
+# config = TransferConfig(use_threads=False)
+# filename = "/tmp/Digits_Test.txt"
+# f = open(filename, "wb")
+# s3_client.download_fileobj(bucket_name, "ML_Pipeline/Digits_Test_Small.txt" , f, Config=config)
+# f.close()
+# print("Init download ###########################")
 
 def lambda_handler(event, context):
     if('dummy' in event) and (event['dummy'] == 1):
         print("Dummy call, doing nothing")
         return
+    s3_client = boto3.client('s3')
+    bucket_name = 'serverless-bound'
+    config = TransferConfig(use_threads=False)
 
     start_time = int(round(time.time() * 1000))
 
     start_download = int(round(time.time() * 1000))
-    filename = "/tmp/Digits_Train_Org.txt"
+    filename = "/tmp/Digits_Train.txt"
     f = open(filename, "wb")
-    s3_client.download_fileobj(bucket_name, "ML_Pipeline/Digits_Train_org.txt" , f, Config=config)
+    s3_client.download_fileobj(bucket_name, "ML_Pipeline/Digits_Train.txt" , f, Config=config)
     f.close()
     end_download = int(round(time.time() * 1000))
 
@@ -44,7 +47,7 @@ def lambda_handler(event, context):
     #s3_client.download_fileobj(bucket_name, "LightGBM_Data_Input/Digits_Test_Small.txt" , f, Config=config)
     #f.close()
 
-    train_data = genfromtxt('/tmp/Digits_Train_Org.txt', delimiter='\t')
+    train_data = genfromtxt('/tmp/Digits_Train.txt', delimiter='\t')
     #test_data = genfromtxt('/tmp/Digits_Test.txt', delimiter='\t')
 
     train_labels = train_data[:,0]
@@ -102,47 +105,14 @@ def lambda_handler(event, context):
     end_upload = int(round(time.time() * 1000)) 
     end_time = int(round(time.time() * 1000))
 
-    subfilename = "PCA_" + event['key1'] + "_start_" + str(start_time) + "_end_"+ str(end_time)
-    filename = "/tmp/" + subfilename
-    f = open(filename, "w")
-    f.write(filename)
-    f.close()
-    s3_client.upload_file(filename, bucket_name, "ML_Pipeline/LightGBM_Times/" + subfilename, Config=config)
+    res = [end_download - start_download, end_process - start_process, end_upload - start_upload, end_time - start_time]
+    res = [i/1000 for i in res]
+    
+    return {
+        'statusCode': 200,
+        'body': json.dumps(res)
+    }
 
-    bundle_size= event['bundle_size']
-    list_hyper_params=[]
-    all_runs = 4*4*4
-
-    for feature_fraction in [0.25, 0.5, 0.75, 0.95]:
-        max_depth = 10
-        for num_of_trees in  [5, 10, 15, 20]:
-            list_hyper_params.append((num_of_trees, max_depth, feature_fraction))
-
-    #random.shuffle(list_hyper_params)
-    #print(list_hyper_params)
-
-    returnedDic={}
-    returnedDic["detail"] = {}
-    returnedDic["detail"]["indeces"] = []
-
-    num_of_trees=[]
-    max_depth=[]
-    feature_fraction = []
-    num_bundles=0
-    count=0
-    for tri in list_hyper_params:
-        feature_fraction.append(tri[2])
-        max_depth.append(tri[1])
-        num_of_trees.append(tri[0])
-        count+= 1
-        if(count >= bundle_size):
-            count=0
-            num_bundles +=1
-            j={ "mod_index":num_bundles, "PCA_Download": (end_download - start_download), "PCA_Process": (end_process - start_process), "PCA_Upload": (end_upload - start_upload) , "key1": "inv_300", "num_of_trees": num_of_trees, "max_depth": max_depth, "feature_fraction": feature_fraction, "threads": 6}
-            num_of_trees=[]
-            max_depth=[]
-            feature_fraction = []
-            returnedDic["detail"]["indeces"].append(j)
-
-    print(returnedDic)
-    return returnedDic
+if __name__ == '__main__':
+    res = lambda_handler({'dummy': 0}, None)
+    print(res)
