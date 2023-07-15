@@ -9,7 +9,7 @@
 
 cd PCA/; mkdir package; pip install --target ./package numpy; 
 cd package; zip -r ../../PCA_Package.zip .; cd ../
-zip ../PCA_Package.zip ./*; cd ../
+zip ../PCA_Package.zip ./*py; cd ../
 
 aws lambda create-function \
 --function-name ML-Pipeline-stage0 \

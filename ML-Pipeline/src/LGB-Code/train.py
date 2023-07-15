@@ -2,16 +2,46 @@ import lightgbm as lgb
 import boto3
 import numpy as np
 from boto3.s3.transfer import TransferConfig
-import json
 import random
 import time
-import os
+from multiprocessing import Process, Manager
 
 
-def train(func_id, process_id, feature_fraction, max_depth, num_of_trees):
+def train_with_multprocess(task_id, num_process):
+    processes = []
+    manager = Manager()
+    res_dict = manager.dict()
+    param = {
+        'feature_fraction': 1,
+        'max_depth': 8,
+        'num_of_trees': 30,
+        'chance': 1
+    }
+    for i in range(num_process):
+        feature_fraction = round(random.random()/2 + 0.5, 1)
+        chance = round(random.random()/2 + 0.5, 1)
+        
+        param['feature_fraction'] = feature_fraction
+        param['chance'] = chance
+        
+        pro = Process(target=train, args=(task_id, i, param['feature_fraction'],\
+                    param['max_depth'], param['num_of_trees'], param['chance'], res_dict))
+        processes.append(pro)
+        
+    for p in processes:
+        p.start()
+    
+    for p in processes:
+        p.join()
+        
+    return res_dict
+
+def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance, res_dict):
     assert isinstance(process_id, int)
-    assert isinstance(func_id, int)
+    assert isinstance(task_id, int)
     start_process = int(round(time.time() * 1000)) / 1000.0
+    
+    # print(feature_fraction, max_depth, num_of_trees, chance)
     
     s3_client = boto3.client('s3')
     config = TransferConfig(use_threads=False)
@@ -28,8 +58,8 @@ def train(func_id, process_id, feature_fraction, max_depth, num_of_trees):
     Y_train = train_data[0:5000,0]
     X_train = train_data[0:5000,1:train_data.shape[1]]
     
-    _id=str(func_id) + "_" + str(process_id)
-    chance = 0.8  #round(random.random()/2 + 0.5,1)
+    _id=str(task_id) + "_" + str(process_id)
+    # chance = round(random.random()/2 + 0.5,1)
     params = {
         'boosting_type': 'gbdt',
         'objective': 'multiclass',
@@ -67,16 +97,19 @@ def train(func_id, process_id, feature_fraction, max_depth, num_of_trees):
     model_name="lightGBM_model_" + str(_id) + ".txt"
     gbm.save_model("/tmp/" + model_name)
     start_upload = int(round(time.time() * 1000)) / 1000.0
-    s3_client.upload_file("/tmp/" + model_name, bucket_name, "ML_Pipeline/" + model_name, Config=config)
+    s3_client.upload_file("/tmp/" + model_name, bucket_name, "ML_Pipeline/stage1/" + model_name, Config=config)
     end_upload = int(round(time.time() * 1000)) / 1000.0
     
     end_process = int(round(time.time() * 1000)) / 1000.0
     
-    return [acc, end_download-start_download, end_process-start_process, \
+    res_dict[process_id] = [acc, end_download-start_download, end_process-start_process, \
             end_upload-start_upload, end_process - start_process]
     
 
 if __name__ == '__main__':
-    res = train(0, 0, 0.8, 8, 30)
+    t0 = time.time()
+    res = train_with_multprocess(1, 8)
+    t1 = time.time()
     
+    print("Total time: ", t1-t0)
     print(res)
