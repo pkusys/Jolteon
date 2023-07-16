@@ -1,3 +1,4 @@
+from perf_model import StagePerfModel
 import boto3
 from multiprocessing.pool import ThreadPool
 from multiprocessing import cpu_count
@@ -38,6 +39,8 @@ class Stage:
         
         self.num_func = 1
         self.config = {'memory': 1024, 'timeout': 360}
+
+        self.perf_model = StagePerfModel(self.stage_name)
         
         self.children = []
         self.parents = []
@@ -83,6 +86,19 @@ class Stage:
         )
         
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            return True
+        else:
+            return False
+
+    def update_config(self, new_memory, new_num_func):
+        assert isinstance(new_memory, int) and new_memory >= 128 and new_memory <= 10*1024 and \
+            isinstance(new_num_func, int)
+        if not self.allow_parallel:
+            new_num_func = 1
+
+        self.config['memory'] = new_memory
+        self.num_func = new_num_func
+        if self.update_lamda_config():
             return True
         else:
             return False

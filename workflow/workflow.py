@@ -1,4 +1,5 @@
 from stage import Stage, Status
+from perf_model import StagePerfModel, config_pairs, step_names
 import json
 from utils import MyThread, MyProcess, extract_info_from_log
 import time
@@ -108,7 +109,10 @@ class Workflow:
         # for s in self.stages:
         #     print(s.stage_id, ':' , s.status, end=' ')
         # print()
-            
+    
+    def init_stage_status(self):
+        for stage in self.stages:
+            stage.status = Status.WAITING
     
     def lazy_execute(self):
         # Stage info is only changed in main thread
@@ -151,6 +155,123 @@ class Workflow:
     
     def eager_execute(self):
         raise NotImplementedError
+
+    def profile(self, num_epochs=3) -> str:
+        # Use different configurations to profile, 
+        # profile multiple epochs under the same configuration
+        # and write the results to a storage (S3 or local) or pass to the performance model
+        
+        # Organize the results into an array divided according to each stage
+        # res is a dict of stage_name, res[stage_name] is a dict of step_name;
+        # res[stage_name][step_name] is a 2D array with shape (num_epochs, num_config_pairs)
+        res = dict()
+        for stage in self.stages:
+            res[stage.stage_name] = dict()
+            for step_name in step_names:
+                res[stage.stage_name][step_name] = [[0 for i in range(len(config_pairs))] for j in range(num_epochs)]
+        
+        for config_pair in config_pairs:
+            for stage in self.stages:
+                mem_size, num_func = config_pair
+                if not stage.update_config(mem_size, num_func):
+                    raise Exception('Config update failed')
+            
+            for epoch_id in range(num_epochs):
+                # self.init_stage_status()
+                # r = self.lazy_execute()
+            # TODO: ANALYZE the logs and write the results to res
+            # Below is a fake result for testing 
+                config_id = config_pairs.index(config_pair)
+                for step in step_names:
+                    for s in self.stages:
+                        res[s.stage_name][step][epoch_id][config_id] = 1000.0 / ((epoch_id + 1) * (config_id + 1))
+        # Persist the results, write to local with path './profiling_results.json'
+        profile_paths = []
+        for stage in self.stages:
+            # TODO: modify the path to a profile directory
+            prof_path = self.workflow_name + '_' + stage.stage_name + '_profile.json'
+            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+            json.dump(res, open(prof_path, 'w'))
+            profile_paths.append(prof_path)
+        return profile_paths
+
+    def train_perf_model(self, profile_paths):
+        assert isinstance(profile_paths, list) and len(profile_paths) == len(self.stages)
+        for stage in self.stages:
+            if (self.stages.index(stage) > 0):
+                continue
+            stage.perf_model.train(profile_paths[self.stages.index(stage)])
+
+    def find_paths(self):
+        paths = []
+        # Initialize the queue with the sources, each source is a path on its own
+        queue = [[source] for source in self.sources]
+
+        while len(queue) > 0:
+            # Take the first path from the queue
+            path = queue.pop(0)
+            # Get the last node from the path
+            node = path[-1]
+            # If this node is a sink, we found a path from source to sink
+            if node in self.sinks:
+                paths.append(path)
+            else:
+                # Otherwise, extend the path with the node's children and put it back in the queue
+                for child in node.children:
+                    if child not in path:  # Avoid cycles
+                        new_path = list(path)
+                        new_path.append(child)
+                        queue.append(new_path)
+        return paths
+    
+    def print_paths(self, paths):
+        assert isinstance(paths, list)
+        for path in paths:
+            print('Path:', end=' ')
+            for stage in path:
+                if path.index(stage) != len(path) - 1:
+                    print(stage.stage_name, end='-->')
+                else:
+                    print(stage.stage_name)      
+
+    def predict(self, input_size, mode='latency'):
+        assert isinstance(input_size, int) and input_size > 0
+        assert mode in ['latency', 'cost']
+        if mode == 'latency':
+            paths = self.find_paths()
+            latency = 0.0
+            for path in paths:
+                tmp_latency = 0.0
+                for stage in path:
+                    tmp_latency += stage.perf_model.predict(input_size, 
+                                                            stage.config['memory'] / 1792, 
+                                                            stage.num_func, mode)
+                if paths.index(path) == 0:
+                    latency = tmp_latency
+                elif tmp_latency < latency:
+                    latency = tmp_latency
+        else:
+            cost = 0.0
+            for stage in self.stages:
+                cost += stage.perf_model.predict(input_size, stage.config['memory'] / 1792, 
+                                                 stage.num_func, mode)
+            return cost
+
+    def sample_offline(self, num_samples):
+        assert isinstance(num_samples, int) and num_samples > 0
+        res = []
+        for stage in self.stages:
+            res += stage.perf_model.sample_offline(num_samples)
+        # TODO: store samples in a sample directory
+        sample_path = f'{self.stage_name}_samples.json'
+        json.dump(res, open(sample_path, 'w'))
+        return sample_path
+
+    def fuse_samples_online(self, sample_path, num_fused_samples):
+        assert isinstance(sample_path, str) and sample_path.endswith('.json')
+        assert isinstance(num_fused_samples, int) and num_fused_samples > 0
+        # TODO: fuse like k-means
+        pass
     
     def __getstate__(self):
         self_dict = self.__dict__.copy()
@@ -162,7 +283,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'step_by_step' # 'step_by_step' 'lazy'
+    test_mode = 'step_by_step' # 'step_by_step' 'lazy' 'perf_model'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './config.json')
@@ -257,5 +378,11 @@ if __name__ == '__main__':
         print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
               + time_list[4] + time_list[6] + time_list[7])
         print('\n\n')
+    elif test_mode == 'perf_model':
+        wf = Workflow( './config.json')
+        p = wf.profile()
+        wf.train_perf_model(p)
+        pr =wf.stages[0].perf_model.predict(1024, 1, 4)
+        wf.print_paths(wf.find_paths())
     else:
         raise NotImplementedError
