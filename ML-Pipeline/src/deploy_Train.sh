@@ -3,8 +3,7 @@
 cd LGB-Code/
 docker build -t lgb-img .
 cd ../
-pwd=$(aws ecr get-login-password --region us-east-1)
-uid='325476609965'
+uid=325476609965
 
 aws ecr delete-repository --repository-name lgb-img
 

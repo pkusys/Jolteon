@@ -3,6 +3,7 @@ from scipy.special import softmax
 import numpy as np
 from joblib import dump, load
 from multiprocessing import Process
+import boto3
 
 class MergedLGBMClassifier(BaseEstimator):
     def __init__(self, model_list):
@@ -46,3 +47,21 @@ class MyProcess(Process):
     @property
     def result(self):
         return self._result
+    
+def get_files(bucket_name, key):
+    assert isinstance(key, str)
+    
+    s3_client = boto3.client('s3')
+    
+    response = s3_client.list_objects_v2(
+        Bucket=bucket_name,
+        Prefix=key
+    )
+    
+    res = []
+    if 'Contents' in response:
+        for file in response['Contents']:
+            res.append(file['Key'])
+    else:
+        raise Exception('No files found')
+    return res

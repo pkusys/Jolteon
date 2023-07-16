@@ -1,4 +1,6 @@
 import time
+import json
+
 import train
 
 def handler(event, context):
@@ -19,11 +21,12 @@ def handler(event, context):
         else:
             num_processes = average_tasks
             
-        train.train_with_multprocess(task_id, num_processes)
+        res = train.train_with_multprocess(task_id, num_processes)
         
     else:
         raise Exception('Invalid func_id')
     
     return {
         'statusCode': 200,
+        'body': json.dumps(res)
     }

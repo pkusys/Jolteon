@@ -7,5 +7,7 @@ RUN pip3 install numpy lightgbm scikit-learn
 COPY lambda_function.py   ./
 COPY train.py   ./
 COPY utils.py   ./
+COPY aggregate.py   ./
+COPY test.py  ./
 CMD ["lambda_function.handler"]      
 

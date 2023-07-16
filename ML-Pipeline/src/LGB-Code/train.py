@@ -8,6 +8,7 @@ from multiprocessing import Process, Manager
 
 
 def train_with_multprocess(task_id, num_process):
+    start = int(round(time.time() * 1000)) / 1000.0
     processes = []
     manager = Manager()
     res_dict = manager.dict()
@@ -34,12 +35,30 @@ def train_with_multprocess(task_id, num_process):
     for p in processes:
         p.join()
         
-    return res_dict
+    end = int(round(time.time() * 1000)) / 1000.0
+    
+    avg_acc = 0
+    avg_read = 0
+    avg_compute = 0
+    avg_write = 0
+    
+    for i in res_dict:
+        avg_acc += res_dict[i][0]
+        avg_read += res_dict[i][1]
+        avg_compute += res_dict[i][2]
+        avg_write += res_dict[i][3]
+        
+    avg_acc = avg_acc/len(res)
+    avg_read = avg_read/len(res)
+    avg_compute = avg_compute/len(res)
+    avg_write = avg_write/len(res)
+    
+    return [avg_read, avg_compute, avg_write, end - start, avg_acc]
 
 def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance, res_dict):
     assert isinstance(process_id, int)
     assert isinstance(task_id, int)
-    start_process = int(round(time.time() * 1000)) / 1000.0
+    start = int(round(time.time() * 1000)) / 1000.0
     
     # print(feature_fraction, max_depth, num_of_trees, chance)
     
@@ -100,10 +119,10 @@ def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance
     s3_client.upload_file("/tmp/" + model_name, bucket_name, "ML_Pipeline/stage1/" + model_name, Config=config)
     end_upload = int(round(time.time() * 1000)) / 1000.0
     
-    end_process = int(round(time.time() * 1000)) / 1000.0
+    end = int(round(time.time() * 1000)) / 1000.0
     
     res_dict[process_id] = [acc, end_download-start_download, end_process-start_process, \
-            end_upload-start_upload, end_process - start_process]
+            end_upload-start_upload, end - start]
     
 
 if __name__ == '__main__':
@@ -112,4 +131,3 @@ if __name__ == '__main__':
     t1 = time.time()
     
     print("Total time: ", t1-t0)
-    print(res)
