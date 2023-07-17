@@ -31,13 +31,18 @@ def lambda_handler(event, context):
     s3_client = boto3.client('s3')
     bucket_name = 'serverless-bound'
     config = TransferConfig(use_threads=False)
+    
+    assert 'input_address' in event and 'output_address' in event
+    
+    input_address = event['input_address']
+    output_address = event['output_address']
 
     start_time = int(round(time.time() * 1000))
 
     start_download = int(round(time.time() * 1000))
     filename = "/tmp/Digits_Train.txt"
     f = open(filename, "wb")
-    s3_client.download_fileobj(bucket_name, "ML_Pipeline/Digits_Train.txt" , f, Config=config)
+    s3_client.download_fileobj(bucket_name, input_address[0], f, Config=config)
     f.close()
     end_download = int(round(time.time() * 1000))
 
@@ -74,9 +79,9 @@ def lambda_handler(event, context):
     PA = vectors.T.dot(CA.T)
     #PB = vectors.T.dot(CB.T)
 
-    np.save("/tmp/vectors_pca.txt", vectors)
+    # np.save("/tmp/vectors_pca.txt", vectors)
 
-    #savetxt("/tmp/vectors_pca.txt", vectors, delimiter="\t")
+    savetxt("/tmp/vectors_pca.txt", vectors, delimiter="\t")
     #vectors.tofile("/tmp/vectors_pca.txt")
 
     #print("vectors shape:")
@@ -97,8 +102,8 @@ def lambda_handler(event, context):
     end_process = int(round(time.time() * 1000))
 
     start_upload = int(round(time.time() * 1000))
-    s3_client.upload_file("/tmp/vectors_pca.txt.npy", bucket_name, "ML_Pipeline/vectors_pca.txt", Config=config)
-    s3_client.upload_file("/tmp/Digits_Train_Transform.txt", bucket_name, "ML_Pipeline/train_pca_transform_2.txt", Config=config)
+    s3_client.upload_file("/tmp/vectors_pca.txt", bucket_name, output_address[0], Config=config)
+    s3_client.upload_file("/tmp/Digits_Train_Transform.txt", bucket_name, output_address[1], Config=config)
 
     #s3_client.upload_file("/tmp/Digits_Test_Transform.txt", bucket_name, "LightGBM_Data/test_pca_transform.txt", Config=config)
 
@@ -108,9 +113,13 @@ def lambda_handler(event, context):
     res = [end_download - start_download, end_process - start_process, end_upload - start_upload, end_time - start_time]
     res = [i/1000 for i in res]
     
+    return_val = {
+        'breakdown': res
+    }
+    
     return {
         'statusCode': 200,
-        'body': json.dumps(res)
+        'body': json.dumps(return_val)
     }
 
 if __name__ == '__main__':

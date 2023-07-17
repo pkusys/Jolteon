@@ -25,8 +25,12 @@ class Workflow:
             self.stages.append(stage)
             
         for index, stage in enumerate(self.stages):
-            stage.input_files = config[str(index)]['input_files']
-            stage.read_pattern = config[str(index)]['read_pattern']
+            if 'input_files' in config[str(index)]:
+                stage.input_files = config[str(index)]['input_files']
+            if 'output_files' in config[str(index)]:
+                stage.output_files = config[str(index)]['output_files']
+            if 'read_pattern' in config[str(index)]:
+                stage.read_pattern = config[str(index)]['read_pattern']
             if 'allow_parallel' in config[str(index)]:
                 if config[str(index)]['allow_parallel'] == 'false' or\
                     config[str(index)]['allow_parallel'] == 'False':
@@ -140,6 +144,9 @@ class Workflow:
         for thread in threads:
             assert not thread.is_alive()
             
+        for thread in threads:
+            thread.join()
+            
         res_list = []
         for thread in threads:
             res_list.append(thread.result)
@@ -213,15 +220,11 @@ if __name__ == '__main__':
             
         print('\n\n')
     elif test_mode == 'lazy':
-        wf = Workflow( './config.json')
-        wf.stages[0].num_func = 8
-        wf.stages[1].num_func = 1
-        wf.stages[2].num_func = 8
+        wf = Workflow( './ML-pipeline.json')
+        wf.stages[0].num_func = 1
+        wf.stages[1].num_func = 4
+        wf.stages[2].num_func = 2
         wf.stages[3].num_func = 1
-        wf.stages[4].num_func = 8
-        wf.stages[5].num_func = 1
-        wf.stages[6].num_func = 8
-        wf.stages[7].num_func = 1
         for stage in wf.stages:
             print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')
         print()
@@ -229,6 +232,7 @@ if __name__ == '__main__':
         res = wf.lazy_execute()
         t2 = time.time()
         print('Time:', t2 - t1)
+        # print(res)
         infos = []
         time_list = []
         times_list = []

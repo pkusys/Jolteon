@@ -12,6 +12,11 @@ def aggregate_models(num_tasks, task_id, key):
     start = int(round(time.time() * 1000)) / 1000.0
     
     start_download = int(round(time.time() * 1000)) / 1000.0
+    input_address = key['input_address']
+    output_address = key['output_address']
+    
+    assert len(input_address) == 2
+    assert len(output_address) == 2
     
     # Read test data from S3
     data_file = "/tmp/Digits_Test_Transform.txt"
@@ -19,14 +24,14 @@ def aggregate_models(num_tasks, task_id, key):
     config = TransferConfig(use_threads=False)
     
     f = open(data_file, "wb")
-    s3_client.download_fileobj(bucket_name, "ML_Pipeline/train_pca_transform_2.txt" , f, Config=config)
+    s3_client.download_fileobj(bucket_name, input_address[0] , f, Config=config)
     f.close()
     test_data = np.genfromtxt(data_file, delimiter='\t')
     Y_test = test_data[5000:,0]
     X_test = test_data[5000:,1:test_data.shape[1]]
     
     # Read models from S3
-    files = get_files(bucket_name, key)
+    files = get_files(bucket_name, input_address[1])
     number = len(files)
     
     remain = number % num_tasks
@@ -62,7 +67,7 @@ def aggregate_models(num_tasks, task_id, key):
     # Merge models
     forest = MergedLGBMClassifier(model_list)
     model_fn = "/tmp/Forest_model.txt"
-    s3_model_key = "ML_Pipeline/stage2/Forest_model_{}.txt".format(task_id)
+    s3_model_key = output_address[0] + '_' + str(task_id)
     forest.save_model(model_fn)
     
     # Predict
@@ -76,7 +81,7 @@ def aggregate_models(num_tasks, task_id, key):
     # The accuracy on the training set  
     acc = count_match / len(y_pred)
     pred_fn = "/tmp/Predict.txt"
-    s3_pred_key = "ML_Pipeline/stage2/Predict_{}.txt".format(task_id)
+    s3_pred_key = output_address[1] + '_' + str(task_id)
     np.savetxt(pred_fn, y_pred, delimiter='\t')
     
     end_process = int(round(time.time() * 1000)) / 1000.0

@@ -10,7 +10,10 @@ def test_forests(key):
     start = int(round(time.time() * 1000)) / 1000.0
     
     start_download = int(round(time.time() * 1000)) / 1000.0
-    files = get_files(bucket_name, key)
+    input_address = key['input_address']
+    assert len(input_address) == 2
+    
+    files = get_files(bucket_name, input_address[1])
     preds = []
     
     # Read predictions from S3
@@ -30,7 +33,7 @@ def test_forests(key):
     config = TransferConfig(use_threads=False)
     
     f = open(data_file, "wb")
-    s3_client.download_fileobj(bucket_name, "ML_Pipeline/train_pca_transform_2.txt" , f, Config=config)
+    s3_client.download_fileobj(bucket_name, input_address[0], f, Config=config)
     f.close()
     test_data = np.genfromtxt(data_file, delimiter='\t')
     Y_test = test_data[5000:,0]

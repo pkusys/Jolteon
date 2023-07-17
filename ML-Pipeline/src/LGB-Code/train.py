@@ -7,8 +7,10 @@ import time
 from multiprocessing import Process, Manager
 
 
-def train_with_multprocess(task_id, num_process):
+def train_with_multprocess(task_id, num_process, loc):
     start = int(round(time.time() * 1000)) / 1000.0
+    ia = loc['input_address'][0]
+    oa = loc['output_address'][0]
     processes = []
     manager = Manager()
     res_dict = manager.dict()
@@ -26,7 +28,7 @@ def train_with_multprocess(task_id, num_process):
         param['chance'] = chance
         
         pro = Process(target=train, args=(task_id, i, param['feature_fraction'],\
-                    param['max_depth'], param['num_of_trees'], param['chance'], res_dict))
+                    param['max_depth'], param['num_of_trees'], param['chance'], ia, oa, res_dict))
         processes.append(pro)
         
     for p in processes:
@@ -48,14 +50,14 @@ def train_with_multprocess(task_id, num_process):
         avg_compute += res_dict[i][2]
         avg_write += res_dict[i][3]
         
-    avg_acc = avg_acc/len(res)
-    avg_read = avg_read/len(res)
-    avg_compute = avg_compute/len(res)
-    avg_write = avg_write/len(res)
+    avg_acc = avg_acc/len(res_dict)
+    avg_read = avg_read/len(res_dict)
+    avg_compute = avg_compute/len(res_dict)
+    avg_write = avg_write/len(res_dict)
     
     return [avg_read, avg_compute, avg_write, end - start, avg_acc]
 
-def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance, res_dict):
+def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance, ia, oa, res_dict):
     assert isinstance(process_id, int)
     assert isinstance(task_id, int)
     start = int(round(time.time() * 1000)) / 1000.0
@@ -69,7 +71,7 @@ def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance
     
     f = open(filename, "wb")
     start_download = int(round(time.time() * 1000)) / 1000.0
-    s3_client.download_fileobj(bucket_name, "ML_Pipeline/train_pca_transform_2.txt" , f, Config=config)
+    s3_client.download_fileobj(bucket_name, ia, f, Config=config)
     end_download = int(round(time.time() * 1000)) / 1000.0
     f.close()
     
@@ -113,10 +115,10 @@ def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance
     acc = count_match/len(y_pred)
     end_process = int(round(time.time() * 1000)) / 1000.0
     
-    model_name="lightGBM_model_" + str(_id) + ".txt"
+    model_name = '_tree_' + str(_id)
     gbm.save_model("/tmp/" + model_name)
     start_upload = int(round(time.time() * 1000)) / 1000.0
-    s3_client.upload_file("/tmp/" + model_name, bucket_name, "ML_Pipeline/stage1/" + model_name, Config=config)
+    s3_client.upload_file("/tmp/" + model_name, bucket_name, oa + model_name, Config=config)
     end_upload = int(round(time.time() * 1000)) / 1000.0
     
     end = int(round(time.time() * 1000)) / 1000.0
