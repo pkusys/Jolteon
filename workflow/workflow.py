@@ -346,8 +346,8 @@ if __name__ == '__main__':
     elif test_mode == 'lazy':
         wf = Workflow( './ML-pipeline.json')
         wf.stages[0].num_func = 1
-        wf.stages[1].num_func = 4
-        wf.stages[2].num_func = 2
+        wf.stages[1].num_func = 3
+        wf.stages[2].num_func = 3
         wf.stages[3].num_func = 1
         for stage in wf.stages:
             print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')

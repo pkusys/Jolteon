@@ -154,8 +154,6 @@ class Stage:
         output_address = []
         table_name = []
         read_pattern = []
-        if self.output_files is None:
-            output_address = prefix + self.workflow_name + '/' + self.stage_name + '/intermediate'
         storage_mode = 's3'
         num_partitions = [None for i in range(len(self.read_pattern))]
         num_tasks = self.num_func
@@ -182,6 +180,8 @@ class Stage:
         if self.output_files is not None:
             for i in range(len(self.output_files)):
                 output_address.append(prefix + self.output_files[i])
+        elif self.output_files is None:
+            output_address = prefix + self.workflow_name + '/' + self.stage_name + '/intermediate'
         
         # 1736 is ad-hoc value for AWS lambda
         num_vcpu = int(round(self.config['memory'] / 1736))
