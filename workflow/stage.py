@@ -37,13 +37,14 @@ class Stage:
         self.status = Status.WAITING
         
         self.num_func = 1
-        self.config = {'memory': 1024, 'timeout': 360}
+        self.config = {'memory': 2048, 'timeout': 360}
         
         self.children = []
         self.parents = []
         self.input_files = None
         self.output_files = None
         self.read_pattern = None
+        self.extra_args = None
         
         self.allow_parallel = True
         
@@ -165,6 +166,10 @@ class Stage:
             for i in range(len(self.output_files)):
                 output_address.append(prefix + self.output_files[i])
         
+        # 1736 is ad-hoc value for AWS lambda
+        num_vcpu = int(round(self.config['memory'] / 1736))
+        num_vcpu = max(num_vcpu, 1)
+        
         payload = {
             'task_id': 0,
             'input_address': input_address,
@@ -174,8 +179,14 @@ class Stage:
             'storage_mode': storage_mode,
             'num_tasks': num_tasks,
             'num_partitions': num_partitions,
-            'func_id': func_id
+            'func_id': func_id,
+            'num_vcpu': num_vcpu
         }
+        
+        if self.extra_args is not None:
+            for k in self.extra_args.keys():
+                assert k not in payload.keys()
+                payload[k] = self.extra_args[k]
             
         # construct payload for each lambda function invocation
         payload_list = []
@@ -191,7 +202,8 @@ class Stage:
         t0 = time.time()
         
         t_pool = self.pool
-        
+        # res = self.invoke_lambda(payload_list[0])
+        # ret_list.append(res)
         ret_list = t_pool.map(self.invoke_lambda, payload_list)
         
         t1 = time.time()

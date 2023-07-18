@@ -36,6 +36,9 @@ class Workflow:
                     config[str(index)]['allow_parallel'] == 'False':
                         stage.allow_parallel = False
                         
+            if 'extra_args' in config[str(index)]:
+                stage.extra_args = config[str(index)]['extra_args']
+                        
             parents = config[str(index)]['parents']
             for p in parents:
                 stage.add_parent(self.stages[p])
@@ -232,7 +235,7 @@ if __name__ == '__main__':
         res = wf.lazy_execute()
         t2 = time.time()
         print('Time:', t2 - t1)
-        # print(res)
+        print(res)
         infos = []
         time_list = []
         times_list = []
@@ -259,7 +262,7 @@ if __name__ == '__main__':
             print('Stage', idx, 'time:', t)
             print(times_list[idx])
         print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
-              + time_list[4] + time_list[6] + time_list[7])
+              + time_list[2] + time_list[3])
         print('\n\n')
     else:
         raise NotImplementedError

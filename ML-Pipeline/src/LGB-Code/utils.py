@@ -4,6 +4,7 @@ import numpy as np
 from joblib import dump, load
 from multiprocessing import Process
 import boto3
+import time
 
 class MergedLGBMClassifier(BaseEstimator):
     def __init__(self, model_list):
@@ -65,3 +66,48 @@ def get_files(bucket_name, key):
     else:
         raise Exception('No files found')
     return res
+
+# MyPool run() will not finish and sticks into the while loop
+class MyPool:
+    def __init__(self, size, processes):
+        assert size > 0
+        assert isinstance(size, int)
+        assert isinstance(processes, list)
+        assert len(processes) > 0
+        assert all(isinstance(p, Process) for p in processes)
+        
+        self.size = size
+        self.processes = processes
+        self.start = [False] * len(processes)
+        self.finish = [False] * len(processes)
+        self.quota = self.size
+        
+    def update(self):
+        for i in range(len(self.processes)):
+            if self.start[i] and not self.finish[i]:
+                if self.processes[i].is_alive():
+                    continue
+                else:
+                    self.finish[i] = True
+                    self.quota += 1
+        
+    def run(self):
+        index = 0
+        num = len(self.processes)
+        t0 = time.time()
+        while self.finish[num - 1] is False:
+            self.update()
+            ct = time.time()
+            if ct - t0 > 15:
+                print('quota: ', self.quota)
+                print('index: ', index)
+                print(self.processes[0].is_alive())
+                break
+            if self.quota > 0 and index < num:
+                assert self.start[index] is False
+                self.processes[index].start()
+                self.start[index] = True
+                self.quota -= 1
+                index += 1
+        for p in self.processes:
+            p.join()

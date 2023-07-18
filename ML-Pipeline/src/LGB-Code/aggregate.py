@@ -34,6 +34,8 @@ def aggregate_models(num_tasks, task_id, key):
     files = get_files(bucket_name, input_address[1])
     number = len(files)
     
+    assert number >= num_tasks
+    
     remain = number % num_tasks
     number = number // num_tasks
     

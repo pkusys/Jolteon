@@ -5,9 +5,10 @@ from boto3.s3.transfer import TransferConfig
 import random
 import time
 from multiprocessing import Process, Manager
+from utils import MyPool
 
 
-def train_with_multprocess(task_id, num_process, loc):
+def train_with_multprocess(task_id, num_process, num_vcpu, loc):
     start = int(round(time.time() * 1000)) / 1000.0
     ia = loc['input_address'][0]
     oa = loc['output_address'][0]
@@ -20,6 +21,7 @@ def train_with_multprocess(task_id, num_process, loc):
         'num_of_trees': 30,
         'chance': 1
     }
+
     for i in range(num_process):
         feature_fraction = round(random.random()/2 + 0.5, 1)
         chance = round(random.random()/2 + 0.5, 1)
@@ -30,12 +32,23 @@ def train_with_multprocess(task_id, num_process, loc):
         pro = Process(target=train, args=(task_id, i, param['feature_fraction'],\
                     param['max_depth'], param['num_of_trees'], param['chance'], ia, oa, res_dict))
         processes.append(pro)
-        
-    for p in processes:
-        p.start()
     
-    for p in processes:
-        p.join()
+    start_ids = 0
+    end_ids = start_ids + num_vcpu
+    
+    while start_ids < num_process:
+        end_ids = min(end_ids, num_process)
+        for i in range(start_ids, end_ids):
+            processes[i].start()
+            
+        for i in range(start_ids, end_ids):
+            processes[i].join()
+        
+        start_ids += num_vcpu
+        end_ids += num_vcpu
+    
+    # pool = MyPool(num_vcpu, processes)
+    # pool.run()
         
     end = int(round(time.time() * 1000)) / 1000.0
     
@@ -50,10 +63,10 @@ def train_with_multprocess(task_id, num_process, loc):
         avg_compute += res_dict[i][2]
         avg_write += res_dict[i][3]
         
-    avg_acc = avg_acc/len(res_dict)
-    avg_read = avg_read/len(res_dict)
-    avg_compute = avg_compute/len(res_dict)
-    avg_write = avg_write/len(res_dict)
+    avg_acc = avg_acc / len(res_dict)
+    avg_read = avg_read / num_vcpu
+    avg_compute = avg_compute / num_vcpu
+    avg_write = avg_write / num_vcpu
     
     return [avg_read, avg_compute, avg_write, end - start, avg_acc]
 
@@ -126,10 +139,15 @@ def train(task_id, process_id, feature_fraction, max_depth, num_of_trees, chance
     res_dict[process_id] = [acc, end_download-start_download, end_process-start_process, \
             end_upload-start_upload, end - start]
     
+    return None
+    
 
 if __name__ == '__main__':
+    loc = {}
+    loc['input_address'] = ['ML_Pipeline/stage0/train_pca_transform.txt']
+    loc['output_address'] = ['ML_Pipeline/stage1/model']
     t0 = time.time()
-    res = train_with_multprocess(1, 8)
+    res = train_with_multprocess(0, 2, 1, loc)
     t1 = time.time()
     
     print("Total time: ", t1-t0)

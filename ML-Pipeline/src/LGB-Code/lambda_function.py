@@ -12,6 +12,7 @@ def handler(event, context):
     
     if event['func_id'] == 1:
         num_tasks = int(event['num_tasks'])
+        num_vcpu = int(event['num_vcpu'])
         if 'total_trees' in event:
             total_trees = int(event['total_trees'])
         else:
@@ -19,6 +20,8 @@ def handler(event, context):
         task_id = int(event['task_id'])
         loc = {'input_address' : event['input_address'], 
                'output_address' : event['output_address']}
+        
+        assert total_trees >= num_tasks
         
         average_tasks = int(total_trees / num_tasks)
         remain_tasks = total_trees % num_tasks
@@ -28,7 +31,7 @@ def handler(event, context):
         else:
             num_processes = average_tasks
             
-        res = train.train_with_multprocess(task_id, num_processes, loc)
+        res = train.train_with_multprocess(task_id, num_processes, num_vcpu, loc)
         
     elif event['func_id'] == 2:
         num_tasks = int(event['num_tasks'])
