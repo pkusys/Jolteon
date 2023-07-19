@@ -38,14 +38,17 @@ class Stage:
         self.status = Status.WAITING
         
         self.num_func = 1
-        self.config = {'memory': 1024, 'timeout': 360}
+        
+        self.config = {'memory': 2048, 'timeout': 360}
 
         self.perf_model = StagePerfModel(self.stage_name)
         
         self.children = []
         self.parents = []
-        self.input_files = []
-        self.read_pattern = []
+        self.input_files = None
+        self.output_files = None
+        self.read_pattern = None
+        self.extra_args = None
         
         self.allow_parallel = True
         
@@ -148,9 +151,11 @@ class Stage:
         
         prefix = ''
         input_address = []
+        output_address = []
         table_name = []
         read_pattern = []
-        output_address = prefix + self.workflow_name + '/' + self.stage_name + '/intermediate'
+        if self.output_files is None:
+            output_address = prefix + self.workflow_name + '/' + self.stage_name + '/intermediate'
         storage_mode = 's3'
         num_partitions = [None for i in range(len(self.read_pattern))]
         num_tasks = self.num_func
@@ -159,10 +164,13 @@ class Stage:
         assert len(self.read_pattern) == len(self.input_files)
         index = 0
         
-        for i in range(len(self.read_pattern)):
-            input_address.append(prefix + self.input_files[i])
-            read_pattern.append(self.read_pattern[i])
-            table_name.append(extract_name(self.input_files[i]))
+        assert self.input_files is not None
+        for i in range(len(self.input_files)):
+            if self.input_files is not None:
+                input_address.append(prefix + self.input_files[i])
+                table_name.append(extract_name(self.input_files[i]))
+            if self.read_pattern is not None:
+                read_pattern.append(self.read_pattern[i])
             # read from raw table
             if self.read_pattern[i] == 'read_partial_table' or self.read_pattern[i] == 'read_table':
                 num_partitions[i] = 1
@@ -170,6 +178,14 @@ class Stage:
             else:
                 num_partitions[i] = self.parents[index].num_func
                 index += 1
+                
+        if self.output_files is not None:
+            for i in range(len(self.output_files)):
+                output_address.append(prefix + self.output_files[i])
+        
+        # 1736 is ad-hoc value for AWS lambda
+        num_vcpu = int(round(self.config['memory'] / 1736))
+        num_vcpu = max(num_vcpu, 1)
         
         payload = {
             'task_id': 0,
@@ -180,8 +196,14 @@ class Stage:
             'storage_mode': storage_mode,
             'num_tasks': num_tasks,
             'num_partitions': num_partitions,
-            'func_id': func_id
+            'func_id': func_id,
+            'num_vcpu': num_vcpu
         }
+        
+        if self.extra_args is not None:
+            for k in self.extra_args.keys():
+                assert k not in payload.keys()
+                payload[k] = self.extra_args[k]
             
         # construct payload for each lambda function invocation
         payload_list = []
@@ -197,7 +219,8 @@ class Stage:
         t0 = time.time()
         
         t_pool = self.pool
-        
+        # res = self.invoke_lambda(payload_list[0])
+        # ret_list.append(res)
         ret_list = t_pool.map(self.invoke_lambda, payload_list)
         
         t1 = time.time()

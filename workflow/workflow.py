@@ -26,12 +26,19 @@ class Workflow:
             self.stages.append(stage)
             
         for index, stage in enumerate(self.stages):
-            stage.input_files = config[str(index)]['input_files']
-            stage.read_pattern = config[str(index)]['read_pattern']
+            if 'input_files' in config[str(index)]:
+                stage.input_files = config[str(index)]['input_files']
+            if 'output_files' in config[str(index)]:
+                stage.output_files = config[str(index)]['output_files']
+            if 'read_pattern' in config[str(index)]:
+                stage.read_pattern = config[str(index)]['read_pattern']
             if 'allow_parallel' in config[str(index)]:
                 if config[str(index)]['allow_parallel'] == 'false' or\
                     config[str(index)]['allow_parallel'] == 'False':
                         stage.allow_parallel = False
+                        
+            if 'extra_args' in config[str(index)]:
+                stage.extra_args = config[str(index)]['extra_args']
                         
             parents = config[str(index)]['parents']
             for p in parents:
@@ -143,6 +150,9 @@ class Workflow:
             
         for thread in threads:
             assert not thread.is_alive()
+            
+        for thread in threads:
+            thread.join()
             
         res_list = []
         for thread in threads:
@@ -283,7 +293,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'step_by_step' # 'step_by_step' 'lazy' 'perf_model'
+    test_mode = 'lazy' # 'step_by_step' 'lazy' 'perf_model'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './config.json')
@@ -334,15 +344,11 @@ if __name__ == '__main__':
             
         print('\n\n')
     elif test_mode == 'lazy':
-        wf = Workflow( './config.json')
-        wf.stages[0].num_func = 20
-        wf.stages[1].num_func = 1
-        wf.stages[2].num_func = 20
-        wf.stages[3].num_func = 20
-        wf.stages[4].num_func = 20
-        wf.stages[5].num_func = 20
-        wf.stages[6].num_func = 20
-        wf.stages[7].num_func = 1
+        wf = Workflow( './ML-pipeline.json')
+        wf.stages[0].num_func = 1
+        wf.stages[1].num_func = 4
+        wf.stages[2].num_func = 2
+        wf.stages[3].num_func = 1
         for stage in wf.stages:
             print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')
         print()
@@ -350,6 +356,7 @@ if __name__ == '__main__':
         res = wf.lazy_execute()
         t2 = time.time()
         print('Time:', t2 - t1)
+        print(res)
         infos = []
         time_list = []
         times_list = []
@@ -366,7 +373,7 @@ if __name__ == '__main__':
                 if 'statusCode' not in rd:
                     print(rd)
                 rd = json.loads(rd['body'])
-                l.append(rd['breakdown'][-1])
+                l.append(rd['breakdown'])
             times_list.append(l)
         cost = 0
         for info in infos:
@@ -376,7 +383,7 @@ if __name__ == '__main__':
             print('Stage', idx, 'time:', t)
             print(times_list[idx])
         print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
-              + time_list[4] + time_list[6] + time_list[7])
+              + time_list[2] + time_list[3])
         print('\n\n')
     elif test_mode == 'perf_model':
         wf = Workflow( './config.json')
