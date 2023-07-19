@@ -2,7 +2,7 @@
 ## Install dependency
 ```
 mkdir package
-pip install --target ./package boto3
+pip install --target ./package pandas
 cd package
 zip -r ../my_deployment_package.zip .
 cd ..

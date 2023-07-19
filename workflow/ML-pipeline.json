@@ -1,0 +1,38 @@
+{
+    "workflow_name": "ML-Pipeline",
+    "num_stages": 4,
+    "0": {
+        "stage_name": "stage0",
+        "parents": [],
+        "children": [1, 2, 3],
+        "allow_parallel": "false",
+        "input_files": ["ML_Pipeline/Digits_Train.txt"],
+        "output_files": ["ML_Pipeline/stage0/vectors_pca.txt", "ML_Pipeline/stage0/train_pca_transform.txt"],
+        "read_pattern": ["read_table"]
+    },
+    "1": {
+        "stage_name": "stage1",
+        "parents": [0],
+        "children": [2],
+        "input_files": ["ML_Pipeline/stage0/train_pca_transform.txt"],
+        "output_files": ["ML_Pipeline/stage1/model"],
+        "read_pattern": ["read"],
+        "extra_args": {"total_trees" : 8}
+    },
+    "2": {
+        "stage_name": "stage2",
+        "parents": [0, 1],
+        "children": [3],
+        "input_files": ["ML_Pipeline/stage0/train_pca_transform.txt", "ML_Pipeline/stage1/model"],
+        "output_files": ["ML_Pipeline/stage2/forest", "ML_Pipeline/stage2/pred"],
+        "read_pattern": ["read", "read"]
+    },
+    "3": {
+        "stage_name": "stage3",
+        "parents": [0, 2],
+        "children": [],
+        "allow_parallel": "false",
+        "input_files": ["ML_Pipeline/stage0/train_pca_transform.txt", "ML_Pipeline/stage2/pred"],
+        "read_pattern": ["read", "read"]
+    }
+}
