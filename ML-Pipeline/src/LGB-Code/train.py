@@ -147,7 +147,7 @@ if __name__ == '__main__':
     loc['input_address'] = ['ML_Pipeline/stage0/train_pca_transform.txt']
     loc['output_address'] = ['ML_Pipeline/stage1/model']
     t0 = time.time()
-    res = train_with_multprocess(0, 2, 1, loc)
+    res = train_with_multprocess(0, 1, 1, loc)
     t1 = time.time()
     
     print("Total time: ", t1-t0)

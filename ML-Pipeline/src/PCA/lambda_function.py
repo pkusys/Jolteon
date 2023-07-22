@@ -123,5 +123,11 @@ def lambda_handler(event, context):
     }
 
 if __name__ == '__main__':
-    res = lambda_handler({'dummy': 0}, None)
+    time.sleep(15)
+    param = {
+        'dummy': 0,
+        'input_address': ['ML_Pipeline/Digits_Train.txt'],
+        'output_address': ["ML_Pipeline/stage0/vectors_pca.txt", "ML_Pipeline/stage0/train_pca_transform.txt"]
+    }
+    res = lambda_handler(param, None)
     print(res)

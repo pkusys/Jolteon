@@ -28,8 +28,8 @@ class Caerus(Scheduler):
             for stage in self.workflow.stages:
                 inputs = stage.input_files
                 cnt = 0
-                for dir in inputs:
-                    cnt += utils.get_dir_size(dir)
+                for directory in inputs:
+                    cnt += utils.get_dir_size(directory)
                 file_size.append(cnt)
                 
             sum_file_size = sum(file_size)
@@ -41,6 +41,26 @@ class Caerus(Scheduler):
         num_funcs = [int(item * total_parallelism) for item in self.parallelism]
         for stage in self.workflow.stages:
             stage.num_func = num_funcs[stage.stage_id] if num_funcs[stage.stage_id] > 0 else 1
+            
+class Orion(Caerus):
+    def __init__(self, workflow: Workflow, storage_mode = 's3'):
+        super().__init__(workflow)
+        self.storage_mode = storage_mode
+        self.parallelism = []
+    
+    # Get the sampling and some analytical params of the workflow
+    def profile(self):
+        pass
+        
+    def bestfit(self):
+        pass
+        
+    def get_cost(self):
+        pass
+    
+    def get_latency(self):
+        pass
+        
         
 if __name__ == '__main__':
     wf = Workflow('config.json')
