@@ -64,9 +64,8 @@ def aggregate_models(num_tasks, task_id, key):
         
     end_download = int(round(time.time() * 1000)) / 1000.0
     
-    start_process = int(round(time.time() * 1000)) / 1000.0
-    
     # Merge models
+    start_process = int(round(time.time() * 1000)) / 1000.0
     forest = MergedLGBMClassifier(model_list)
     model_fn = "/tmp/Forest_model.txt"
     s3_model_key = output_address[0] + '_' + str(task_id)
@@ -84,11 +83,10 @@ def aggregate_models(num_tasks, task_id, key):
     acc = count_match / len(y_pred)
     pred_fn = "/tmp/Predict.txt"
     s3_pred_key = output_address[1] + '_' + str(task_id)
-    np.savetxt(pred_fn, y_pred, delimiter='\t')
-    
     end_process = int(round(time.time() * 1000)) / 1000.0
     
     start_upload = int(round(time.time() * 1000)) / 1000.0
+    np.savetxt(pred_fn, y_pred, delimiter='\t')
     s3_client.upload_file(model_fn, bucket_name, s3_model_key, Config=config)
     s3_client.upload_file(pred_fn, bucket_name, s3_pred_key, Config=config)
     end_upload = int(round(time.time() * 1000)) / 1000.0
