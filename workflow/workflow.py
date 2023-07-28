@@ -169,10 +169,11 @@ class Workflow:
     def eager_execute(self):
         raise NotImplementedError
 
-    def profile(self, num_epochs=3) -> str:
+    def profile(self, num_epochs=1) -> str:
         # Use different configurations to profile, 
         # profile multiple epochs under the same configuration
         # and write the results to a storage (S3 or local) or pass to the performance model
+        assert isinstance(num_epochs, int) and num_epochs > 0 
         
         # Organize the results into an array divided according to each stage
         # res is a dict of stage_name, res[stage_name] is a dict of step_name;
@@ -210,7 +211,6 @@ class Workflow:
                                 continue
                             info = extract_info_from_log(result[1])
                             infos.append(info)
-                            
                             rd = json.loads(result[0])
                             if 'statusCode' not in rd:
                                 print(rd)
@@ -232,10 +232,10 @@ class Workflow:
                         max_tt = np.percentile(tt, 95, axis=1)
                         cold_tt_avg = t - avg_tt[3]
                         cold_tt_max = t - np.sum(max_tt[:3])
-                        # print('Avg:', avg_tt)
-                        # print('Max:', max_tt)
-                        # print('Cold:', cold_tt_avg, cold_tt_max)
-                        # print('\n')
+                        print('Avg:', avg_tt)
+                        print('Max:', max_tt)
+                        print('Cold:', cold_tt_avg, cold_tt_max)
+                        print('\n')
                         stage_name = self.stages[idx].stage_name
                         config_id = config_pairs.index(config_pair)
                         res[stage_name]['cold'][epoch_id][config_id] = [cold_tt_avg, cold_tt_max]
@@ -245,9 +245,9 @@ class Workflow:
                     print('\n\n')
                 print('\n\n\n')
 
-            # Persist the results, write to local with path './profiling_results.json'
+            # Persist the results
             prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            prof_dir = os.path.join(prof_dir, 'profiles-tmp/')
+            prof_dir = os.path.join(prof_dir, 'profiles/')
             if not os.path.exists(prof_dir):
                 os.mkdir(prof_dir)
             prof_path = self.workflow_name + '_profile.json'
@@ -257,17 +257,16 @@ class Workflow:
             return prof_path
         
         except Exception as e:
-            print(e)
-            print('\n\n')
             print(res)
+            print('\n\n')
             raise e
 
-    def train_perf_model(self, profile_paths):
-        assert isinstance(profile_paths, list) and len(profile_paths) == len(self.stages)
+    def train_perf_model(self, profile_path):
+        assert isinstance(profile_path, str) and os.path.exists(profile_path)
         for stage in self.stages:
-            if (self.stages.index(stage) > 0):
+            if (self.stages.index(stage) != 2):
                 continue
-            stage.perf_model.train(profile_paths[self.stages.index(stage)])
+            stage.perf_model.train(profile_path)
 
     def find_paths(self):
         paths = []
@@ -459,9 +458,10 @@ if __name__ == '__main__':
         wf.close_pools()
     elif test_mode == 'perf_model':
         wf = Workflow( './ML-pipeline.json')
-        p = wf.profile()
-        print(p)
-        # wf.train_perf_model(p)
+        # p = wf.profile()
+        # print(p)
+        p = '../profiles/ML-Pipeline_profile.json'
+        wf.train_perf_model(p)
         # pr =wf.stages[0].perf_model.predict(1024, 1, 4)
         # wf.print_paths(wf.find_paths())
         wf.close_pools()
