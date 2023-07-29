@@ -140,7 +140,8 @@ class Stage:
         
         return [resp_payload, log_result]
         
-    def execute(self):
+    def execute(self, dummy=0):
+        assert dummy == 0 or dummy == 1
         assert self.status == Status.RUNNING
         if not self.allow_parallel:
             assert self.num_func == 1
@@ -189,6 +190,7 @@ class Stage:
         
         payload = {
             'task_id': 0,
+            'dummy': dummy,
             'input_address': input_address,
             'table_name': table_name,
             'read_pattern': read_pattern,

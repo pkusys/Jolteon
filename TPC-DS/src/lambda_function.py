@@ -9,6 +9,10 @@ def lambda_handler(event, context):
     #     'body': json.dumps(event)
     # }
     
+    if('dummy' in event) and (event['dummy'] == 1):
+        print("Dummy call, doing nothing")
+        return
+    
     res = dsq95.invoke_q95_func(event)
     
     return {

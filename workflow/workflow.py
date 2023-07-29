@@ -191,6 +191,19 @@ class Workflow:
                     mem_size, num_func = config_pair
                     if not stage.update_config(mem_size, num_func):
                         raise Exception('Config update failed')
+                    '''
+                        Warm-up dummy run is currently not adequate, since too frequent 
+                    Lambda invocation cause the following error:
+                        botocore.errorfactory.ResourceConflictException: An error occurred 
+                        (ResourceConflictException) when calling the UpdateFunctionConfiguration 
+                        operation: The operation cannot be performed at this time. 
+                        An update is in progress for resource: arn:aws:lambda:us-east-1:325476609965:function:ML-Pipeline-stage3
+                    
+                        This is probably because the asynchronous update of Lambda configuration or 
+                    the collision of Lambda invocation and configuration update.
+                    '''
+                    # stage.status = Status.RUNNING
+                    # r = stage.execute(dummy=1)
                 
                 for epoch_id in range(num_epochs):
                     print('Epoch:', epoch_id)
@@ -345,6 +358,12 @@ class Workflow:
         json.dump(res, open(sample_path, 'w'))
         return sample_path
 
+    def generate_func_code(self, code_path):
+        assert isinstance(code_path, str) and code_path.endswith('.py')
+        for stage in self.stages:
+            stage.perf_model.generate_func_code(code_path)
+        pass
+
     def fuse_samples_online(self, sample_path, num_fused_samples):
         assert isinstance(sample_path, str) and sample_path.endswith('.json')
         assert isinstance(num_fused_samples, int) and num_fused_samples > 0
@@ -470,10 +489,10 @@ if __name__ == '__main__':
         wf.close_pools()
     elif test_mode == 'perf_model':
         wf = Workflow( './ML-pipeline.json')
-        # p = wf.profile()
+        p = wf.profile()
         # print(p)
-        p = '../profiles/ML-Pipeline_profile.json'
-        wf.train_perf_model(p)
+        # p = '../profiles/ML-Pipeline_profile.json'
+        # wf.train_perf_model(p)
         # pr =wf.stages[0].perf_model.predict(1024, 1, 4)
         # wf.print_paths(wf.find_paths())
         wf.close_pools()
