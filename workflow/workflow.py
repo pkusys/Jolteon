@@ -169,7 +169,7 @@ class Workflow:
     def eager_execute(self):
         raise NotImplementedError
 
-    def profile(self, num_epochs=1) -> str:
+    def profile(self, num_epochs=2) -> str:
         # Use different configurations to profile, 
         # profile multiple epochs under the same configuration
         # and write the results to a storage (S3 or local) or pass to the performance model
@@ -262,11 +262,14 @@ class Workflow:
             raise e
 
     def train_perf_model(self, profile_path):
+        t0 = time.time()
         assert isinstance(profile_path, str) and os.path.exists(profile_path)
         for stage in self.stages:
-            if (self.stages.index(stage) != 2):
-                continue
+            # if (self.stages.index(stage) != 1):
+            #     continue
             stage.perf_model.train(profile_path)
+        t1 = time.time()
+        print('Training time:', t1 - t0, 's')
 
     def find_paths(self):
         paths = []
@@ -300,7 +303,7 @@ class Workflow:
                 else:
                     print(stage.stage_name)      
 
-    def predict(self, input_size, mode='latency'):
+    def predict(self, mode='latency', input_size=None):
         assert isinstance(input_size, int) and input_size > 0
         assert mode in ['latency', 'cost']
         if mode == 'latency':
@@ -308,10 +311,13 @@ class Workflow:
             latency = 0.0
             for path in paths:
                 tmp_latency = 0.0
+                parent_d = 1
                 for stage in path:
-                    tmp_latency += stage.perf_model.predict(input_size, 
-                                                            stage.config['memory'] / 1792, 
-                                                            stage.num_func, mode)
+                    tmp_latency += stage.perf_model.predict(stage.config['memory'], 
+                                                            stage.num_func, mode, 
+                                                            parent_d=parent_d,
+                                                            input_size=input_size)
+                    parent_d = stage.num_func
                 if paths.index(path) == 0:
                     latency = tmp_latency
                 elif tmp_latency < latency:
@@ -319,8 +325,9 @@ class Workflow:
         else:
             cost = 0.0
             for stage in self.stages:
-                cost += stage.perf_model.predict(input_size, stage.config['memory'] / 1792, 
-                                                 stage.num_func, mode)
+                cost += stage.perf_model.predict(stage.config['memory'],
+                                                 stage.num_func, mode,
+                                                 input_size=input_size)
             return cost
 
     def sample_offline(self, num_samples):
@@ -328,8 +335,13 @@ class Workflow:
         res = []
         for stage in self.stages:
             res += stage.perf_model.sample_offline(num_samples)
-        # TODO: store samples in a sample directory
-        sample_path = f'{self.stage_name}_samples.json'
+        sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        sample_dir = os.path.join(sample_dir, 'samples/')
+        if not os.path.exists(sample_dir):
+            os.mkdir(sample_dir)
+        sample_path = self.workflow_name + '_samples.json'
+        sample_path = sample_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+        sample_path = os.path.join(sample_dir, sample_path)
         json.dump(res, open(sample_path, 'w'))
         return sample_path
 
