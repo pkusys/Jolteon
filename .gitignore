@@ -187,3 +187,4 @@ TPC-DS/data/*
 **/package
 **.zip
 **tmp**
+profiles/*

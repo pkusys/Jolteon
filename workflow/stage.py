@@ -59,7 +59,7 @@ class Stage:
     def change_pool_size(self, new_size):
         assert isinstance(new_size, int)
         self.pool.close()
-        self.pool.join
+        self.pool.join()
         
         self.pool_size = new_size
         self.pool = Pool(self.pool_size)
@@ -75,7 +75,7 @@ class Stage:
         
         self.config = config_
         
-    def update_lamda_config(self):
+    def update_lambda_config(self):
         if self.func_name is None:
             wn = self.workflow_name.replace('/', '-')
             self.func_name = wn + '-' + self.stage_name
@@ -101,7 +101,7 @@ class Stage:
 
         self.config['memory'] = new_memory
         self.num_func = new_num_func
-        if self.update_lamda_config():
+        if self.update_lambda_config():
             return True
         else:
             return False
@@ -140,7 +140,8 @@ class Stage:
         
         return [resp_payload, log_result]
         
-    def execute(self):
+    def execute(self, dummy=0):
+        assert dummy == 0 or dummy == 1
         assert self.status == Status.RUNNING
         if not self.allow_parallel:
             assert self.num_func == 1
@@ -183,12 +184,13 @@ class Stage:
         elif self.output_files is None:
             output_address = prefix + self.workflow_name + '/' + self.stage_name + '/intermediate'
         
-        # 1736 is ad-hoc value for AWS lambda
-        num_vcpu = int(round(self.config['memory'] / 1736))
+        # 1792 is ad-hoc value for AWS lambda
+        num_vcpu = int(round(self.config['memory'] / 1792))
         num_vcpu = max(num_vcpu, 1)
         
         payload = {
             'task_id': 0,
+            'dummy': dummy,
             'input_address': input_address,
             'table_name': table_name,
             'read_pattern': read_pattern,
@@ -234,6 +236,11 @@ class Stage:
         
         return ret_list
     
+    def close_pool(self):
+        if self.pool is not None:
+            self.pool.close()
+            self.pool.join()
+    
     def __str__(self):
         return self.stage_name
     
@@ -241,7 +248,14 @@ class Stage:
         self_dict = self.__dict__.copy()
         del self_dict['pool']
         return self_dict
-    
-    def __del__(self):
-        self.pool.close()
-        self.pool.join
+
+    '''
+        In Python, the __del__ method is called when an object's reference count drops to zero. 
+    However, this behavior can lead to problems when your object relies on other objects (for 
+    example, your Stage object relies on the multiprocessing.Pool object). If Python's garbage 
+    collector deletes the pool object first and then deletes the Stage object, then calling 
+    self.pool.close() in the __del__ method will raise an AttributeError.
+    '''
+    # def __del__(self):
+    #     self.pool.close()
+    #     self.pool.join()
