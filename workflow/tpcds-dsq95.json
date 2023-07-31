@@ -58,5 +58,7 @@
         "allow_parallel": "false",
         "input_files": ["tpcds/dsq95/stage6/intermediate"],
         "read_pattern": ["read_all_partitions"]
-    }
+    },
+    "critical_path": [0, 1, 4, 6, 7],
+    "secondary_path": [2, 4, 6, 7]
 }

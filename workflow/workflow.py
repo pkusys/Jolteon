@@ -16,6 +16,9 @@ class Workflow:
         self.stages = []
         self.sources = []
         self.sinks = []
+
+        self.critical_path = None
+        self.secondary_path = None
         
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
@@ -65,6 +68,12 @@ class Workflow:
 
             if len(stage.children) == 0:
                 self.sinks.append(stage)
+
+        # config critical path and secondary path
+        if 'critical_path' in config:
+            self.critical_path = [self.stages[i] for i in config['critical_path']]
+        if 'secondary_path' in config:
+            self.secondary_path = [self.stages[i] for i in config['secondary_path']]
                 
         for stage in self.sources:
             stage.status = Status.READY
@@ -343,11 +352,45 @@ class Workflow:
                                                  input_size=input_size)
             return cost
 
+    def store_params(self):
+        res = dict()
+        for stage in self.stages:
+            res[stage.stage_name] = stage.perf_model.params()
+        
+        param_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        param_dir = os.path.join(param_dir, 'params/')
+        if not os.path.exists(param_dir):
+            os.mkdir(param_dir)
+        param_path = self.workflow_name + '_params.json'
+        param_path = param_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+        param_path = os.path.join(param_dir, param_path)
+        json.dump(res, open(param_path, 'w'))
+
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
-        res = []
+        res = dict()
         for stage in self.stages:
-            res += stage.perf_model.sample_offline(num_samples)
+            res[stage.stage_name] = stage.perf_model.sample_offline(num_samples)
+
+        # # Prune the samples
+        # vecs = []
+        # for i in range(num_samples):
+        #     v = []
+        #     for stage in self.stages:
+        #         v = v + res[stage.stage_name]['read'][i] + \
+        #             res[stage.stage_name]['compute'][i] + res[stage.stage_name]['write'][i]
+        #     vecs.append(v)
+        # vecs = np.array(vecs)
+
+        # # is_greater_than_others = np.ones(vecs.shape[0], dtype=bool)
+        # is_less_than_another = np.zeros(vecs.shape[0], dtype=bool)
+        # for i in range(vecs.shape[0]):
+        #     # is_greater_than_others[i] = np.all(np.all(vecs[i] > vecs[np.arange(vecs.shape[0]) != i], axis=1))
+        #     is_less_than_another[i] = np.any(np.all(vecs[i] < vecs[np.arange(vecs.shape[0]) != i], axis=0))
+        # # ge_vecs = vecs[is_greater_than_others]
+        # le_vecs = vecs[is_less_than_another]
+        # print(le_vecs.shape[0])
+        
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
         if not os.path.exists(sample_dir):
@@ -358,11 +401,38 @@ class Workflow:
         json.dump(res, open(sample_path, 'w'))
         return sample_path
 
-    def generate_func_code(self, code_path):
-        assert isinstance(code_path, str) and code_path.endswith('.py')
-        for stage in self.stages:
-            stage.perf_model.generate_func_code(code_path)
-        pass
+
+    '''
+        Generate the python code for the objective function and constraints used by the solver
+    Currently, we use the scipy.optimize as the solver and use numpy as the matrix library. 
+    We now need users to provide the critical path and the (optional) secondary critical path 
+    in order to avoid the occurrence of the np.max() function, which may cause undefined behavior.
+    '''
+    def generate_func_code(self, file_name, critical_path, secondary_path=None, obj_mode='latency'):
+        assert isinstance(file_name, str) and file_name.endswith('.py')
+        assert isinstance(critical_path, list) 
+        assert secondary_path is None or isinstance(secondary_path, list)
+        assert obj_mode in ['latency', 'cost']
+        code_dir = os.path.dirname(os.path.abspath(__file__))
+        code_path = os.path.join(code_dir, file_name)
+        cons_mode = 'latency' if obj_mode == 'cost' else 'cost'
+
+        s = 'import numpy as np\n'
+        s += 'from utils.solver import PCPSolver\n\n'
+        idx = 0
+        idx_map = {stage.stage_name: [] for stage in self.stages}
+
+        # # Generate objective function
+        # for stage in self.stages:
+        #     s += stage.perf_model.generate_func_code(code_path, idx, obj_mode)
+
+        # # Generate constraints
+        # s += '\n\n'
+        # for stage in self.stages:
+        #     s += stage.perf_model.generate_func_code(code_path, idx, cons_mode)
+
+        with open(code_path, 'w') as f:
+            f.write(s)
 
     def fuse_samples_online(self, sample_path, num_fused_samples):
         assert isinstance(sample_path, str) and sample_path.endswith('.json')
@@ -488,13 +558,19 @@ if __name__ == '__main__':
         print('\n\n')
         wf.close_pools()
     elif test_mode == 'perf_model':
-        wf = Workflow( './ML-pipeline.json')
-        p = wf.profile()
+        # wf = Workflow( './ML-pipeline.json')
+        wf= Workflow( './tpcds-dsq95.json')
+        # p = wf.profile()
         # print(p)
-        # p = '../profiles/ML-Pipeline_profile.json'
+        p = '../profiles/ML-Pipeline_profile.json'
         # wf.train_perf_model(p)
-        # pr =wf.stages[0].perf_model.predict(1024, 1, 4)
-        # wf.print_paths(wf.find_paths())
+        # t0 = time.time()
+        # wf.sample_offline(10000)
+        # t1 = time.time()
+        # print('Sample time:', t1-t0, 's')
+        paths = wf.find_paths()
+        wf.print_paths(paths)
+        # wf.generate_func_code('test.py', paths[-1])
         wf.close_pools()
     else:
         raise NotImplementedError

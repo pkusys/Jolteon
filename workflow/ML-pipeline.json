@@ -34,5 +34,6 @@
         "allow_parallel": "false",
         "input_files": ["ML_Pipeline/stage0/train_pca_transform.txt", "ML_Pipeline/stage2/pred"],
         "read_pattern": ["read", "read"]
-    }
+    },
+    "critical_path": [0, 1, 2, 3]
 }

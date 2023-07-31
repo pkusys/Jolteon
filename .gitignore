@@ -188,3 +188,4 @@ TPC-DS/data/*
 **.zip
 **tmp**
 profiles/*
+samples/*

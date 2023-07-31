@@ -16,7 +16,7 @@ the paper "A Sample Approximation Approach for Optimization with Probabilistic C
 '''
 class PCPSolver:
     def __init__(self, num_x, objective, constraint, bound, obj_param_path, cons_param_path, 
-                 risk, approx_risk=0.0, confidence_error=0.05, 
+                 risk, approx_risk=0, confidence_error=0.01, 
                  solver_info={'optlib': 'scipy', 'method': 'SLSQP'}) -> None:
         assert isinstance(num_x, int) and num_x > 0
         assert callable(objective) and callable(constraint)
@@ -53,9 +53,8 @@ class PCPSolver:
         self.num_fused_samples = self.num_samples  # TODO: implement the fusion of samples
 
     def sample_size(self) -> int:
-        # TODO: the right way is (space_size)**n, where n is the dimension of the Var space
         # Orion picks {min, 1024, 1792, max}, so the size is 4
-        search_space_size = (10 * 1024 / 128) * 900
+        search_space_size = (3 * 2)**4  # 4 stages, 4 parallelisms, 6 resource spaces (1024, 2048, 4096, 1792, 3584, 7168)
         # 10G/128M is the resource space size, 900 is the parallelism space size
         min_abs_tol = 1e-2
         if math.isclose(self.risk, self.approx_risk, abs_tol=min_abs_tol):
@@ -113,5 +112,6 @@ class PCPSolver:
 
 
 if __name__ == '__main__':
-    svr = PCPSolver(test_func, lambda x: x[0] + x[1] - 1, 'boun', 0.01, approx_risk=0.0)
+    svr = PCPSolver(4, test_func, lambda x: x[0] + x[1] - 1, 1, '.json', '.json', 
+                    risk=0.05, approx_risk=0, confidence_error=0.05)
     print(svr.get_sample_size())

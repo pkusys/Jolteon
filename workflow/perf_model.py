@@ -1,7 +1,7 @@
-from utils.solver import PCPSolver
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import time
 import json
 import scipy.optimize as scipy_opt
 
@@ -88,8 +88,6 @@ class StagePerfModel:
             # kd is the equivalent vCPU allocation, d is the number of functions
             d = np.array([num_func for mem, num_func in config_pairs] * num_epochs)
             kd = np.array([eq_vcpu_alloc(mem, num_func) for mem, num_func in config_pairs] * num_epochs)
-            print('d:', d)
-            print('kd:', kd)
 
             # Use non-linear least squares to fit the parameters for average time
             # Read
@@ -127,6 +125,7 @@ class StagePerfModel:
             y_ = comp_func(d, popt1[0], popt1[1], popt1[2], popt1[3])
             err1 = (y_ - y_c) / y_c
             popt2, pcov2 = scipy_opt.curve_fit(comp_func, kd, y_c)
+            print('comp params', popt2)
             y_ = comp_func(kd, popt2[0], popt2[1], popt2[2], popt2[3])
             err2 = (y_ - y_c) / y_c
             # Choose the better one
@@ -185,8 +184,6 @@ class StagePerfModel:
             # k_d means the read time may be related to the parent stage's number of functions
             k = np.array([eq_vcpu_alloc(mem, 1) for mem, num_func in config_pairs] * num_epochs)
             k_d = np.array([eq_vcpu_alloc(mem, 1) / num_func for mem, num_func in config_pairs] * num_epochs)
-            print('k:', k)
-            print('k_d:', k_d)
 
             # Use non-linear least squares to fit the parameters for average time
             # Read
@@ -223,6 +220,7 @@ class StagePerfModel:
             # Compute, directly use k to fit
             print('Compute')
             popt1, pcov1 = scipy_opt.curve_fit(comp_func, k, y_c)
+            print('comp params', popt2)
             y_ = comp_func(k, popt1[0], popt1[1], popt1[2], popt1[3])
             err1 = (y_ - y_c) / y_c
             s_err1 = np.mean(np.abs(err1))  # abs mean error
@@ -298,6 +296,12 @@ class StagePerfModel:
         y_1_l = []
         y_2_l = []
         y_3_l = []
+        ps1_max = np.max(ps1, axis=0)
+        ps1_min = np.min(ps1, axis=0)
+        ps2_max = np.max(ps2, axis=0)
+        ps2_min = np.min(ps2, axis=0)
+        ps3_max = np.max(ps3, axis=0)
+        ps3_min = np.min(ps3, axis=0)
 
         x = np.linspace(0.9, 32, 100)
 
@@ -309,6 +313,8 @@ class StagePerfModel:
         for i in range(num_samples):
             y_1_l.append(io_func(x, ps1[i][0], ps1[i][1]))
         y_1_l = np.array(y_1_l)
+        y_1_l_max = io_func(x, ps1_max[0], ps1_max[1])
+        y_1_l_min = io_func(x, ps1_min[0], ps1_min[1])
         
         y_2 = comp_func(x, popt2[0], popt2[1], popt2[2], popt2[3])
         y_2_max = comp_func(x, popt2[0]+f*sigma2[0], popt2[1]+f*sigma2[1], popt2[2]+f*sigma2[2], popt2[3]+f*sigma2[3])
@@ -316,6 +322,8 @@ class StagePerfModel:
         for i in range(num_samples):
             y_2_l.append(comp_func(x, ps2[i][0], ps2[i][1], ps2[i][2], ps2[i][3]))
         y_2_l = np.array(y_2_l)
+        y_2_l_max = comp_func(x, ps2_max[0], ps2_max[1], ps2_max[2], ps2_max[3])
+        y_2_l_min = comp_func(x, ps2_min[0], ps2_min[1], ps2_min[2], ps2_min[3])
         
         y_3 = io_func(x, popt3[0], popt3[1])
         y_3_max = io_func(x, popt3[0]+f*sigma3[0], popt3[1]+f*sigma3[1])
@@ -323,11 +331,15 @@ class StagePerfModel:
         for i in range(num_samples):
             y_3_l.append(io_func(x, ps3[i][0], ps3[i][1]))
         y_3_l = np.array(y_3_l)
+        y_3_l_max = io_func(x, ps3_max[0], ps3_max[1])
+        y_3_l_min = io_func(x, ps3_min[0], ps3_min[1])
         
         y_p = y_1 + y_2 + y_3 + np.mean(y_s, axis=0)
         y_p_max = y_1_max + y_2_max + y_3_max + np.mean(y_s, axis=0)
         y_p_min = y_1_min + y_2_min + y_3_min + np.mean(y_s, axis=0)
         y_l = y_1_l + y_2_l + y_3_l + np.mean(y_s, axis=0)
+        y_l_max = y_1_l_max + y_2_l_max + y_3_l_max + np.mean(y_s, axis=0)
+        y_l_min = y_1_l_min + y_2_l_min + y_3_l_min + np.mean(y_s, axis=0)
 
         y_1_d = io_func(kd, popt1[0], popt1[1])
         y_2_d = comp_func(d, popt2[0], popt2[1], popt2[2], popt2[3])
@@ -355,6 +367,7 @@ class StagePerfModel:
             l0, = axes.plot(x, y_p, 'r', label='pred_mean')
             for i in range(num_samples):
                 l1, = axes.plot(x, y_l[i], 'darkorange', label='pred w/ cov', alpha=0.1, zorder=1)
+            l2, = axes.plot(x, y_l_max, 'royalblue', label='pred_max', zorder=2)
             fig.legend(handles=[s, l0, l1], ncol=3, loc='upper center', bbox_to_anchor=(0.5, 1.0), fontsize=font_size)
             # plt.plot(x, y_p_max, 'royalblue')
             # plt.plot(x, y_p_min, 'royalblue')
@@ -401,6 +414,31 @@ class StagePerfModel:
         else:
             return pred * num_func * mem / 1024 * 0.0000000167 + 0.2 * num_func / 1000000
 
+    def params(self) -> dict:
+        res = {}
+        res['cold'] = np.mean(self.cold_params_avg)
+        res['read'] = self.read_params_avg.tolist()
+        res['compute'] = self.compute_params_avg.tolist()
+        res['write'] = self.write_params_avg.tolist()
+        return res
+
+    def sample_offline(self, num_samples):
+        assert isinstance(num_samples, int) and num_samples > 0
+        # Sample for num_samples times
+        res = {'cold': [], 'read': [], 'compute': [], 'write': []}
+        seed_val = int(time.time())
+        rng = np.random.default_rng(seed=seed_val)
+        res['cold'] = rng.choice(self.cold_params_avg, num_samples).reshape(-1, 1).tolist()
+        res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
+                                              num_samples).tolist()
+        res['compute'] = rng.multivariate_normal(self.compute_params_avg, 
+                                                 self.compute_cov_avg, 
+                                                 num_samples).tolist()
+        res['write'] = rng.multivariate_normal(self.write_params_avg, 
+                                               self.write_cov_avg,
+                                               num_samples).tolist()
+        return res
+
     def generate_func_code(self, idx, mode) -> (str, int):
         assert isinstance(idx, int) and idx >= 0
         assert mode in ['latency', 'cost']
@@ -412,19 +450,6 @@ class StagePerfModel:
             pass
         
         return func_str, idx
-
-    def sample_offline(self, num_samples):
-        assert isinstance(num_samples, int) and num_samples > 0
-        # Sample for num_samples times
-        res = []
-        res.append(np.random.choice(self.cold_params, num_samples).tolist())
-        for i in range(self.read_params.shape[0]):
-            res.append(np.random.choice(self.read_params[i], num_samples).tolist())
-        for i in range(self.compute_params.shape[0]):
-            res.append(np.random.choice(self.compute_params[i], num_samples).tolist())
-        for i in range(self.write_params.shape[0]):
-            res.append(np.random.choice(self.write_params[i], num_samples).tolist())
-        return res
 
     def __str__(self):
         return self.stage_name
@@ -438,5 +463,7 @@ class StagePerfModel:
 
 
 if __name__ == '__main__':
-    m = StagePerfModel('stage2')
-    m.visualize('../profiles/ML-Pipeline_profile.json')
+    m = StagePerfModel('stage1')
+    # m.visualize('../profiles/ML-Pipeline_profile.json')
+    m.train('../profiles/ML-Pipeline_profile.json')
+    # print(m.sample_offline(3))
