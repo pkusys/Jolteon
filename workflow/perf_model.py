@@ -26,6 +26,9 @@ def eq_vcpu_alloc(mem, num_func):
 def io_func(x, a, b):
     return a / x + b
 
+def io_func2(x, a, b, c):   # io_func2 is for parent relavent read
+    return a / x[0] + b * x[1] + c
+
 def comp_func(x, a, b, c, d):
     return a / x + b * np.log(x) / x + c / x**2 + d
 
@@ -36,9 +39,11 @@ Shortcoming: it ignores the partitioning reading overhead (k*d, d is the degree 
 of the stage's parent stage, the overhead is usually high for all-to-all shuffle)
 '''
 class StagePerfModel:
-    def __init__(self, stage_name, default_input_size=1024) -> None:
+    def __init__(self, stage_id, stage_name, default_input_size=1024) -> None:
         assert isinstance(stage_name, str)
+        assert isinstance(stage_id, int) and stage_id >= 0
         self.stage_name = stage_name
+        self.stage_id = stage_id
 
         self.allow_parallel = True
 
@@ -52,8 +57,18 @@ class StagePerfModel:
         self.read_cov_avg = []
         self.compute_cov_avg = []
         self.write_cov_avg = []
+
         self.can_intra_parallel = [True, True, True]  # stands for read, compute, write
         self.parent_relavent = False  # only use for not allow parallel and related to parent stage
+
+        # Reduce the total dimension of the parameters from 8 to 5, excluding cold start
+        # allow_parallel: a/d + b/(kd) + c*log(x)/x + e/x**2 + f, x can be d or kd
+        # not allow_parallel: a/k + b*d + c*log(k)/k + e/k**2 + f, 
+        self.x_coeff = 0  # the coefficient of 1/d or 1/k in the stage
+        self.kd_d_coeff = 0  # the coefficient of 1/(kd) or d in the stage
+        self.logx_coeff = 0  # the coefficient of log(x)/x in the stage, x can be d or kd
+        self.x2_coeff = 0  # the coefficient of 1/x**2 in the stage, x can be d or kd
+        self.const_coeff = 0  # the constant coefficient in the stage
 
     def update_allow_parallel(self, allow_parallel) -> None:
         assert isinstance(allow_parallel, bool)
@@ -179,11 +194,44 @@ class StagePerfModel:
             print('--------------------------------')
             print('Intra parallel:', self.can_intra_parallel)
             print('--------------------------------')
+
+            # Compute the coefficients
+            if self.can_intra_parallel[0]:
+                self.kd_d_coeff += self.read_params_avg[0]
+            else:
+                self.x_coeff += self.read_params_avg[0]
+            if self.can_intra_parallel[1]:
+                self.kd_d_coeff += self.compute_params_avg[0]
+            else:
+                self.x_coeff += self.compute_params_avg[0]
+            if self.can_intra_parallel[2]:
+                self.kd_d_coeff += self.write_params_avg[0]
+            else:
+                self.x_coeff += self.write_params_avg[0]
+            self.logx_coeff += self.compute_params_avg[1]
+            self.x2_coeff += self.compute_params_avg[2]
+            self.const_coeff += self.read_params_avg[1] + self.compute_params_avg[3] + \
+                                self.write_params_avg[1]
+            
+            # Compute the error for the stage
+            y_actual = y_r + y_c + y_w + y_s
+            y_pred = self.x_coeff / d + self.kd_d_coeff / kd + self.const_coeff + np.mean(y_s)
+            if self.can_intra_parallel[1]:
+                y_pred += self.logx_coeff * np.log(kd) / kd + self.x2_coeff / kd**2
+            else:
+                y_pred += self.logx_coeff * np.log(d) / d + self.x2_coeff / d**2
+            err = (y_pred - y_actual) / y_actual
+            s_err = np.mean(np.abs(err))
+            m_err = np.mean(err)
+            print('\nStage Error:', err)
+            print('Stage abs mean error:', s_err)
+            print('Stage mean error:', m_err)
+
         else:
             # k is the vCPU allocation
             # k_d means the read time may be related to the parent stage's number of functions
             k = np.array([eq_vcpu_alloc(mem, 1) for mem, num_func in config_pairs] * num_epochs)
-            k_d = np.array([eq_vcpu_alloc(mem, 1) / num_func for mem, num_func in config_pairs] * num_epochs)
+            k_d = np.array([[eq_vcpu_alloc(mem, 1), num_func] for mem, num_func in config_pairs] * num_epochs)
 
             # Use non-linear least squares to fit the parameters for average time
             # Read
@@ -191,8 +239,8 @@ class StagePerfModel:
             popt1, pcov1 = scipy_opt.curve_fit(io_func, k, y_r)
             y_ = io_func(k, popt1[0], popt1[1])
             err1 = (y_ - y_r) / y_r
-            popt2, pcov2 = scipy_opt.curve_fit(io_func, k_d, y_r)
-            y_ = io_func(k_d, popt2[0], popt2[1])
+            popt2, pcov2 = scipy_opt.curve_fit(io_func2, k_d.T, y_r)
+            y_ = io_func2(k_d.T, popt2[0], popt2[1], popt2[2])
             err2 = (y_ - y_r) / y_r
             # # Choose the better one
             s_err1 = np.mean(np.abs(err1))  # abs mean error
@@ -250,6 +298,30 @@ class StagePerfModel:
             print('k abs mean error:', s_err1)
             print('k mean error:', m_err1)
             print('--------------------------------')
+
+            # Compute the coefficients
+            self.x_coeff += self.read_params_avg[0] + self.compute_params_avg[0] + \
+                            self.write_params_avg[0]
+            if self.parent_relavent:
+                self.kd_d_coeff += self.read_params_avg[1]
+                self.const_coeff += self.read_params_avg[2]
+            else:
+                self.const_coeff += self.read_params_avg[1]
+            self.logx_coeff += self.compute_params_avg[1]
+            self.x2_coeff += self.compute_params_avg[2]
+            self.const_coeff += self.compute_params_avg[3] + self.write_params_avg[1]
+
+            # Compute the error for the stage
+            y_actual = y_r + y_c + y_w + y_s
+            y_pred = self.x_coeff / k + self.kd_d_coeff * k_d.T[1] + self.const_coeff + np.mean(y_s) + \
+                    self.logx_coeff * np.log(k) / k + self.x2_coeff / k**2
+            err = (y_pred - y_actual) / y_actual
+            s_err = np.mean(np.abs(err))
+            m_err = np.mean(err)
+            print('\nStage Error:', err)
+            print('Stage abs mean error:', s_err)
+            print('Stage mean error:', m_err)
+        
         print('Training finished')
         print('\n\n')
 
@@ -415,11 +487,13 @@ class StagePerfModel:
             return pred * num_func * mem / 1024 * 0.0000000167 + 0.2 * num_func / 1000000
 
     def params(self) -> dict:
-        res = {}
-        res['cold'] = np.mean(self.cold_params_avg)
-        res['read'] = self.read_params_avg.tolist()
-        res['compute'] = self.compute_params_avg.tolist()
-        res['write'] = self.write_params_avg.tolist()
+        # res = {}
+        # res['cold'] = np.mean(self.cold_params_avg)
+        # res['read'] = self.read_params_avg.tolist()
+        # res['compute'] = self.compute_params_avg.tolist()
+        # res['write'] = self.write_params_avg.tolist()
+        res = [np.mean(self.cold_params_avg), self.x_coeff, self.kd_d_coeff, self.logx_coeff,
+               self.x2_coeff, self.const_coeff]
         return res
 
     def sample_offline(self, num_samples):
@@ -428,28 +502,58 @@ class StagePerfModel:
         res = {'cold': [], 'read': [], 'compute': [], 'write': []}
         seed_val = int(time.time())
         rng = np.random.default_rng(seed=seed_val)
-        res['cold'] = rng.choice(self.cold_params_avg, num_samples).reshape(-1, 1).tolist()
+        res['cold'] = rng.choice(self.cold_params_avg, num_samples)
         res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
-                                              num_samples).tolist()
+                                              num_samples)
         res['compute'] = rng.multivariate_normal(self.compute_params_avg, 
                                                  self.compute_cov_avg, 
-                                                 num_samples).tolist()
+                                                 num_samples)
         res['write'] = rng.multivariate_normal(self.write_params_avg, 
                                                self.write_cov_avg,
-                                               num_samples).tolist()
-        return res
+                                               num_samples)
+        # Organize into coefficient form
+        coeffs = np.zeros((num_samples, 6))
+        coeffs[:, 0] = res['cold']
+        if self.allow_parallel:
+            if self.can_intra_parallel[0]:
+                coeffs[:, 2] += res['read'].T[0]  # 1/(kd)
+            else:
+                coeffs[:, 1] += res['read'].T[0]  # 1/d
+            if self.can_intra_parallel[1]:
+                coeffs[:, 2] += res['compute'].T[0]
+            else:
+                coeffs[:, 1] += res['compute'].T[0]
+            if self.can_intra_parallel[2]:
+                coeffs[:, 2] += res['write'].T[0]
+            else:
+                coeffs[:, 1] += res['write'].T[0]
+            coeffs[:, 3] += res['compute'].T[1]  # log(x)/x
+            coeffs[:, 4] += res['compute'].T[2]  # 1/x**2
+            coeffs[:, 5] += res['read'].T[1] + res['compute'].T[3] + res['write'].T[1]
+        else:
+            coeffs[:, 1] += res['read'].T[0] + res['compute'].T[0] + res['write'].T[0]
+            if self.parent_relavent:
+                coeffs[:, 2] += res['read'].T[1]
+                coeffs[:, 5] += res['read'].T[2]
+            else:
+                coeffs[:, 5] += res['read'].T[1]
+            coeffs[:, 3] += res['compute'].T[1]
+            coeffs[:, 4] += res['compute'].T[2]
 
-    def generate_func_code(self, idx, mode) -> (str, int):
-        assert isinstance(idx, int) and idx >= 0
+        return coeffs.tolist()
+
+    def generate_func_code(self, mode, var, param, parent_idx=-1) -> str:
+        assert isinstance(parent_idx, int)
         assert mode in ['latency', 'cost']
+        assert isinstance(var, str) and isinstance(param, str)
 
-        func_str = ''
+        s = ''
         if mode == 'latency':
             pass
         else:
             pass
         
-        return func_str, idx
+        return s
 
     def __str__(self):
         return self.stage_name
@@ -463,7 +567,9 @@ class StagePerfModel:
 
 
 if __name__ == '__main__':
-    m = StagePerfModel('stage1')
+    m = StagePerfModel(3, 'stage3')
+    m.allow_parallel = False
     # m.visualize('../profiles/ML-Pipeline_profile.json')
     m.train('../profiles/ML-Pipeline_profile.json')
-    # print(m.sample_offline(3))
+    print(m.params())
+    print(m.sample_offline(3))

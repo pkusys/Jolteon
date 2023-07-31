@@ -377,19 +377,20 @@ class Workflow:
         # for i in range(num_samples):
         #     v = []
         #     for stage in self.stages:
-        #         v = v + res[stage.stage_name]['read'][i] + \
-        #             res[stage.stage_name]['compute'][i] + res[stage.stage_name]['write'][i]
+        #         # v = v + res[stage.stage_name]['read'][i] + \
+        #         #     res[stage.stage_name]['compute'][i] + res[stage.stage_name]['write'][i]
+        #         v = v + res[stage.stage_name][i]
         #     vecs.append(v)
         # vecs = np.array(vecs)
 
-        # # is_greater_than_others = np.ones(vecs.shape[0], dtype=bool)
-        # is_less_than_another = np.zeros(vecs.shape[0], dtype=bool)
+        # is_greater_than_others = np.ones(vecs.shape[0], dtype=bool)
+        # # is_less_than_another = np.zeros(vecs.shape[0], dtype=bool)
         # for i in range(vecs.shape[0]):
-        #     # is_greater_than_others[i] = np.all(np.all(vecs[i] > vecs[np.arange(vecs.shape[0]) != i], axis=1))
-        #     is_less_than_another[i] = np.any(np.all(vecs[i] < vecs[np.arange(vecs.shape[0]) != i], axis=0))
-        # # ge_vecs = vecs[is_greater_than_others]
-        # le_vecs = vecs[is_less_than_another]
-        # print(le_vecs.shape[0])
+        #     is_greater_than_others[i] = np.all(np.all(vecs[i] > vecs[np.arange(vecs.shape[0]) != i], axis=1))
+        #     # is_less_than_another[i] = np.any(np.all(vecs[i] < vecs[np.arange(vecs.shape[0]) != i], axis=0))
+        # vecs = vecs[is_greater_than_others]
+        # # vecs = vecs[is_less_than_another]
+        # print(vecs.shape[0])
         
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
@@ -408,26 +409,36 @@ class Workflow:
     We now need users to provide the critical path and the (optional) secondary critical path 
     in order to avoid the occurrence of the np.max() function, which may cause undefined behavior.
     '''
-    def generate_func_code(self, file_name, critical_path, secondary_path=None, obj_mode='latency'):
+    def generate_func_code(self, file_name, critical_path, secondary_path=None, 
+                           obj_mode='latency', solver_type='scipy'):
         assert isinstance(file_name, str) and file_name.endswith('.py')
         assert isinstance(critical_path, list) 
         assert secondary_path is None or isinstance(secondary_path, list)
         assert obj_mode in ['latency', 'cost']
+        assert solver_type in ['scipy', 'pyomo']
         code_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(code_dir, file_name)
         cons_mode = 'latency' if obj_mode == 'cost' else 'cost'
 
-        s = 'import numpy as np\n'
-        s += 'from utils.solver import PCPSolver\n\n'
+        s = 'import numpy as np\n\n'
+        # s += 'from utils.solver import PCPSolver\n\n'
         idx = 0
         idx_map = {stage.stage_name: [] for stage in self.stages}
 
-        # # Generate objective function
+        # Generate objective function
+        if solver_type == 'scipy':
+            s += 'def objective_func(x, p):\n'
+        else:
+            s += 'def objective_func(model):\n'
         # for stage in self.stages:
         #     s += stage.perf_model.generate_func_code(code_path, idx, obj_mode)
 
-        # # Generate constraints
-        # s += '\n\n'
+        # Generate constraints
+        s += '\n\n'
+        if solver_type == 'scipy':
+            s += 'def constraint_func(x, p, b):\n'
+        else:
+            s += 'def constraint_func(model):\n'
         # for stage in self.stages:
         #     s += stage.perf_model.generate_func_code(code_path, idx, cons_mode)
 
@@ -558,19 +569,18 @@ if __name__ == '__main__':
         print('\n\n')
         wf.close_pools()
     elif test_mode == 'perf_model':
-        # wf = Workflow( './ML-pipeline.json')
-        wf= Workflow( './tpcds-dsq95.json')
+        wf = Workflow('./ML-pipeline.json')
         # p = wf.profile()
         # print(p)
         p = '../profiles/ML-Pipeline_profile.json'
-        # wf.train_perf_model(p)
+        wf.train_perf_model(p)
         # t0 = time.time()
         # wf.sample_offline(10000)
         # t1 = time.time()
         # print('Sample time:', t1-t0, 's')
-        paths = wf.find_paths()
-        wf.print_paths(paths)
-        # wf.generate_func_code('test.py', paths[-1])
+        # paths = wf.find_paths()
+        # wf.print_paths(paths)
+        wf.generate_func_code('tmp.py', wf.critical_path, wf.secondary_path, 'latency')
         wf.close_pools()
     else:
         raise NotImplementedError
