@@ -4,6 +4,7 @@ import boto3
 import utils
 import time
 import json
+from utils import MyQueue
 
 # scheduler is responsible for tuning the launch time,
 # number of function invocation and resource configuration
@@ -21,7 +22,8 @@ class Caerus(Scheduler):
         super().__init__(workflow)
         self.storage_mode = storage_mode
         self.parallelism = []
-        
+    
+    # Get the test datasets
     def profile(self):
         file_size = []
         if self.storage_mode == 's3':
@@ -45,20 +47,44 @@ class Caerus(Scheduler):
 class Orion(Caerus):
     def __init__(self, workflow: Workflow, storage_mode = 's3'):
         super().__init__(workflow)
-        self.storage_mode = storage_mode
-        self.parallelism = []
+        self.config = []
+        self.max_memory = 1024 * 8
+        self.memory_grain = 128
     
     # Get the sampling and some analytical params of the workflow
     def profile(self):
         pass
         
-    def bestfit(self):
+    # Just BFS, but stop and return when one node is statisfied with the latency
+    def bestfit(self, latency):
+        # 128 is a configurable value
+        memory_grain = self.memory_grain
+        config_list = [memory_grain for i in range(len(self.workflow.stages))]
+
+        search_spcae = MyQueue()
+        search_spcae.push(config_list)
+
+        while len(search_spcae) > 0:
+            val = search_spcae.pop()
+
+            for i in range(len(val)):
+                new_val = val.copy()
+                new_val[i] += memory_grain
+                # Max limit
+                if new_val[i] > self.max_memory:
+                    continue
+                search_spcae.push(new_val)
+
+                if self.get_latency(new_val) <= latency:
+                    return new_val
+
+        config_list = [self.max_memory for i in range(len(self.workflow.stages))]
+        return config_list
+
+    def get_cost(self, config_list):
         pass
-        
-    def get_cost(self):
-        pass
-    
-    def get_latency(self):
+
+    def get_latency(self, config_list):
         pass
         
         
