@@ -54,17 +54,17 @@ class StagePerfModel:
         self.read_params_avg = []  # A/d + B, d is the equivalent vCPU allocation
         self.compute_params_avg = []  # A/d - B*log(d)/d + C/d**2 + D
         self.write_params_avg = []  # A/d + B
-        self.read_cov_avg = []
+        self.read_cov_avg = []  # covariance matrix
         self.compute_cov_avg = []
         self.write_cov_avg = []
 
         self.can_intra_parallel = [True, True, True]  # stands for read, compute, write
         self.parent_relavent = False  # only use for not allow parallel and related to parent stage
 
-        # Reduce the total dimension of the parameters from 8 to 5, excluding cold start
+        # Reduce the dimension of the parameters from 8 to 5, excluding cold start
         # allow_parallel: a/d + b/(kd) + c*log(x)/x + e/x**2 + f, x can be d or kd
         # not allow_parallel: a/k + b*d + c*log(k)/k + e/k**2 + f, 
-        self.x_coeff = 0  # the coefficient of 1/d or 1/k in the stage
+        self.x_coeff = 0  # the coefficient of 1/d or 1/k in the stage, x can be d or kd
         self.kd_d_coeff = 0  # the coefficient of 1/(kd) or d in the stage
         self.logx_coeff = 0  # the coefficient of log(x)/x in the stage, x can be d or kd
         self.x2_coeff = 0  # the coefficient of 1/x**2 in the stage, x can be d or kd
@@ -484,7 +484,7 @@ class StagePerfModel:
             pred += np.random.choice(self.cold_params_avg)
             return pred
         else:
-            return pred * num_func * mem / 1024 * 0.0000000167 + 0.2 * num_func / 1000000
+            return pred * num_func * mem / 1024 * 0.0000000167 * 1000 + 0.2 * num_func / 1000000
 
     def params(self) -> dict:
         # res = {}
@@ -542,17 +542,57 @@ class StagePerfModel:
 
         return coeffs.tolist()
 
-    def generate_func_code(self, mode, var, param, parent_idx=-1) -> str:
-        assert isinstance(parent_idx, int)
+    def generate_func_code(self, mode, var, param, parent_id=-1, solver_type='scipy') -> str:
+        assert isinstance(parent_id, int)
         assert mode in ['latency', 'cost']
         assert isinstance(var, str) and isinstance(param, str)
+        assert solver_type in ['scipy', 'pyomo']
+
+        # 6 param indices and 2 var indices for each stage
+        # 0: cold, 1: x, 2: kd/d, 3: log(x)/x, 4: 1/x**2, 5: const
+        # 0: var d, 1: var k
 
         s = ''
-        if mode == 'latency':
-            pass
+        offset = 0 if solver_type == 'scipy' else 1
+        cold_param = param + '[%d]'%(self.stage_id*6 + offset)
+        x_param = param + '[%d]'%(self.stage_id*6 + 1 + offset)
+        kd_d_param = param + '[%d]'%(self.stage_id*6 + 2 + offset)
+        logx_param = param + '[%d]'%(self.stage_id*6 + 3 + offset)
+        x2_param = param + '[%d]'%(self.stage_id*6 + 4 + offset)
+        const_param = param + '[%d]'%(self.stage_id*6 + 5 + offset)
+
+        var_d = var + '[%d]'%(self.stage_id*2 + offset)
+        var_k = var + '[%d]'%(self.stage_id*2 + 1 + offset)
+        var_x = ''
+        if self.can_intra_parallel[1]:
+            var_x = var_k + '*' + var_d
         else:
-            pass
-        
+            var_x = var_d
+        var_x = '(' + var_x + ')'
+
+        log_method = 'np.log' if solver_type == 'scipy' else 'pyo.log'
+
+        if self.allow_parallel:
+            s += x_param + '/' + var_d + ' + '
+            s += kd_d_param + '/' + '(' + var_k + '*' + var_d + ')' + ' + '
+            s += logx_param + '*' + log_method + var_x + '/' + var_x + ' + '
+            s += x2_param + '/' + var_x + '**2' + ' + '
+            s += const_param
+        else:
+            s += x_param + '/' + var_k + ' + ' 
+            if self.parent_relavent and parent_id >= 0:
+                var_pd = var + '[%d]'%(parent_id*2)  # parent d
+                s += kd_d_param + '*' + var_pd + ' + '
+            s += logx_param + '*' + log_method + '(' + var_k + ')' + '/' + var_k + ' + '
+            s += x2_param + '/' + var_k + '**2' + ' + '
+            s += const_param
+        if mode == 'latency':
+            s = cold_param + ' + ' + s
+        else:
+            # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225 
+            # 1000 is to convert from ms to s
+            # We multiply 1e5 to the cost to make it more readable
+            s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
         return s
 
     def __str__(self):

@@ -189,3 +189,5 @@ TPC-DS/data/*
 **tmp**
 profiles/*
 samples/*
+params/*
+funcs.py
