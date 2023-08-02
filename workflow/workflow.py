@@ -1,4 +1,4 @@
-from stage import Stage, Status
+from stage import Stage, Status, PerfModel
 from perf_model import StagePerfModel, config_pairs, step_names
 import json
 import os
@@ -7,7 +7,7 @@ from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_d
 import time
 
 class Workflow:
-    def __init__(self, config_file, boto3_client_ = None) -> None:
+    def __init__(self, config_file, perf_model_type = 0, boto3_client_ = None) -> None:
         assert isinstance(config_file, str)
         
         self.workflow_name = None
@@ -20,6 +20,8 @@ class Workflow:
         self.critical_path = None
         self.secondary_path = None
         
+        self.perf_model_type = perf_model_type
+        
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
     
@@ -27,7 +29,7 @@ class Workflow:
         num = config['num_stages']
         self.workflow_name = config['workflow_name']
         for i in range(num):
-            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i)
+            stage = Stage(self.workflow_name, config[str(i)]['stage_name'], i, self.perf_model_type)
             self.stages.append(stage)
             
         for index, stage in enumerate(self.stages):
@@ -290,6 +292,15 @@ class Workflow:
             # if (self.stages.index(stage) != 1):
             #     continue
             stage.perf_model.train(profile_path)
+            
+        if self.perf_model_type == PerfModel.Distribution.value:
+            # if len(self.sinks) != 1:
+            #     raise Exception('Only support sink number == 1')
+            
+            for stage in self.stages:
+                for p in stage.parents:
+                    stage.perf_model.add_up_model(p.perf_model)
+        
         t1 = time.time()
         print('Training time:', t1 - t0, 's')
 
