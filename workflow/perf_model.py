@@ -487,13 +487,8 @@ class StagePerfModel:
             return pred * num_func * mem / 1024 * 0.0000000167 * 1000 + 0.2 * num_func / 1000000
 
     def params(self) -> dict:
-        # res = {}
-        # res['cold'] = np.mean(self.cold_params_avg)
-        # res['read'] = self.read_params_avg.tolist()
-        # res['compute'] = self.compute_params_avg.tolist()
-        # res['write'] = self.write_params_avg.tolist()
-        res = [np.mean(self.cold_params_avg), self.x_coeff, self.kd_d_coeff, self.logx_coeff,
-               self.x2_coeff, self.const_coeff]
+        res = np.array([np.mean(self.cold_params_avg), self.x_coeff, self.kd_d_coeff, self.logx_coeff,
+                        self.x2_coeff, self.const_coeff])
         return res
 
     def sample_offline(self, num_samples):
@@ -540,7 +535,7 @@ class StagePerfModel:
             coeffs[:, 3] += res['compute'].T[1]
             coeffs[:, 4] += res['compute'].T[2]
 
-        return coeffs.tolist()
+        return coeffs
 
     def generate_func_code(self, mode, var, param, parent_id=-1, solver_type='scipy') -> str:
         assert isinstance(parent_id, int)
@@ -562,6 +557,8 @@ class StagePerfModel:
         const_param = param + '[%d]'%(self.stage_id*6 + 5 + offset)
 
         var_d = var + '[%d]'%(self.stage_id*2 + offset)
+        if not self.allow_parallel:
+            var_d = '1'
         var_k = var + '[%d]'%(self.stage_id*2 + 1 + offset)
         var_x = ''
         if self.can_intra_parallel[1]:

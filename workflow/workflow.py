@@ -353,10 +353,9 @@ class Workflow:
             return cost
 
     def store_params(self):
-        res = dict()
-        for stage in self.stages:
-            res[stage.stage_name] = stage.perf_model.params()
-        
+        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+
+        res = res.tolist()
         param_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         param_dir = os.path.join(param_dir, 'params/')
         if not os.path.exists(param_dir):
@@ -369,30 +368,19 @@ class Workflow:
 
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
-        res = dict()
-        for stage in self.stages:
-            res[stage.stage_name] = stage.perf_model.sample_offline(num_samples)
+        res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
 
         # # Prune the samples
-        # vecs = []
-        # for i in range(num_samples):
-        #     v = []
-        #     for stage in self.stages:
-        #         # v = v + res[stage.stage_name]['read'][i] + \
-        #         #     res[stage.stage_name]['compute'][i] + res[stage.stage_name]['write'][i]
-        #         v = v + res[stage.stage_name][i]
-        #     vecs.append(v)
-        # vecs = np.array(vecs)
-
-        # is_greater_than_others = np.ones(vecs.shape[0], dtype=bool)
-        # # is_less_than_another = np.zeros(vecs.shape[0], dtype=bool)
-        # for i in range(vecs.shape[0]):
-        #     is_greater_than_others[i] = np.all(np.all(vecs[i] > vecs[np.arange(vecs.shape[0]) != i], axis=1))
-        #     # is_less_than_another[i] = np.any(np.all(vecs[i] < vecs[np.arange(vecs.shape[0]) != i], axis=0))
-        # vecs = vecs[is_greater_than_others]
+        # is_greater_than_others = np.ones(res.shape[0], dtype=bool)
+        # # is_less_than_another = np.zeros(res.shape[0], dtype=bool)
+        # for i in range(res.shape[0]):
+        #     is_greater_than_others[i] = np.all(np.all(res[i] > res[np.arange(res.shape[0]) != i], axis=1))
+        #     # is_less_than_another[i] = np.any(np.all(res[i] < res[np.arange(res.shape[0]) != i], axis=1))
+        # vecs = res[is_greater_than_others]
         # # vecs = vecs[is_less_than_another]
         # print(vecs.shape[0])
         
+        res = res.tolist()
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
         if not os.path.exists(sample_dir):
@@ -409,6 +397,10 @@ class Workflow:
         # TODO: fuse like k-means
         pass
 
+    def load_params(self, file_path):
+        assert isinstance(file_path, str) and file_path.endswith('.json')
+        return json.load(open(file_path, 'r'))
+    
     '''
         Generate the python code for the objective function and constraints used by the solver
     Currently, we use the scipy.optimize as the solver and use numpy as the matrix library. 
@@ -416,15 +408,15 @@ class Workflow:
     in order to avoid the occurrence of the np.max() function, which may cause undefined behavior.
     '''
     def generate_func_code(self, file_name, critical_path, secondary_path=None, 
-                           obj_mode='latency', solver_type='scipy'):
+                           cons_mode='latency', solver_type='scipy'):
         assert isinstance(file_name, str) and file_name.endswith('.py')
         assert isinstance(critical_path, list) 
         assert secondary_path is None or isinstance(secondary_path, list)
-        assert obj_mode in ['latency', 'cost']
+        assert cons_mode in ['latency', 'cost']
         assert solver_type in ['scipy', 'pyomo']
         code_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(code_dir, file_name)
-        cons_mode = 'latency' if obj_mode == 'cost' else 'cost'
+        obj_mode = 'cost' if cons_mode == 'latency' else 'latency'
 
         parent_ids = [-1 for _ in range(len(self.stages))]
         for stage in self.stages:
@@ -639,24 +631,30 @@ if __name__ == '__main__':
         # print(p)
         p = '../profiles/ML-Pipeline_profile.json'
         wf.train_perf_model(p)
+
         param_path = wf.store_params()
         t0 = time.time()
-        sample_path = wf.sample_offline(2)
+        sample_path = wf.sample_offline(3)
         t1 = time.time()
-        print('Sample time:', t1-t0, 's')
-        # paths = wf.find_paths()
-        # wf.print_paths(paths)
+        print('Sample time:', t1-t0, 's\n\n')
+
         func_path = 'funcs.py'
-        wf.generate_func_code(func_path, wf.critical_path, wf.secondary_path, 'cost')
+        wf.generate_func_code(func_path, wf.critical_path, wf.secondary_path, 
+                              cons_mode='latency')
 
         # Test solver
+        t0 = time.time()
         from funcs import objective_func, constraint_func
         if wf.secondary_path is not None:
             from funcs import constraint_func_2 
-        bound = 24 
+        bound = 1000
+        obj_params = wf.load_params(param_path)
+        cons_params = wf.load_params(sample_path)
         solver = PCPSolver(2*len(wf.stages), objective_func, constraint_func, 
-                           bound, param_path, sample_path)
+                           bound, obj_params, cons_params)
         solver.solve()
+        t1 = time.time()
+        print('Solver time:', t1-t0, 's\n\n')
 
         wf.close_pools()
     else:

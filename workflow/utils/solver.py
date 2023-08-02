@@ -14,7 +14,7 @@ the paper "A Sample Approximation Approach for Optimization with Probabilistic C
 '''
 class PCPSolver:
     def __init__(self, num_X, objective, constraint,
-                 bound, obj_param_path, cons_param_path, 
+                 bound, obj_params, cons_params, 
                  constraint_2=None,
                  risk=0.01, approx_risk=0, confidence_error=0.01, 
                  solver_info={'optlib': 'scipy', 'method': 'SLSQP'}) -> None:
@@ -24,8 +24,7 @@ class PCPSolver:
             assert callable(constraint_2)
         # We consider bound as one positive number (SLO or budget)
         assert (isinstance(bound, float) or isinstance(bound, int)) and bound > 0
-        assert isinstance(obj_param_path, str) and obj_param_path.endswith('.json')
-        assert isinstance(cons_param_path, str) and cons_param_path.endswith('.json')
+        assert isinstance(obj_params, list) and isinstance(cons_params, list)
 
         assert isinstance(risk, float) and risk > 0 and risk < 1
         assert (isinstance(approx_risk, int) and approx_risk == 0 or approx_risk == 1) or \
@@ -40,6 +39,8 @@ class PCPSolver:
         self.constraint = constraint
         self.constraint_2 = constraint_2
         self.bound = bound
+        self.obj_params = obj_params
+        self.cons_params = cons_params
 
         # User-defined risk level (epsilon) for constraint satisfaction (e.g., 0.01 or 0.05)
         self.risk = risk 
@@ -75,12 +76,6 @@ class PCPSolver:
 
     def get_fused_sample_size(self) -> int:
         return self.num_fused_samples
-
-    def load_params(self, param_path):
-        with open(param_path, 'r') as f:
-            params = json.load(f)
-        params = np.array(params)
-        return params
     
     '''
     The generic constraint satisfaction is deprecated due to the nondeterministic behavior of
@@ -97,26 +92,21 @@ class PCPSolver:
         if self.solver_info['optlib'] == 'scipy':
             assert self.solver_info['method'] in ['SLSQP', 'COBYLA', 'trust-constr', 'L-BFGS-B', 'TNC']
             
-            x0 = np.ones(self.num_X)
-            # TODO: assign reasonable initial values for x
-            obj_params = self.load_params(self.obj_param_path)
-            cons_params = self.load_params(self.cons_param_path)
+            x0 = np.ones(self.num_X) * 2  # initial guess
+            obj_params = np.array(self.obj_params)
+            cons_params = np.array(self.cons_params).T
             nonlinear_constraints = NonlinearConstraint(lambda x: self.constraint(x, cons_params, self.bound), -np.inf, 0)
-            x_bounds = [(0, None) for _ in range(self.num_X)] # optional
-            x_bounds = None
+            x_bounds = [(0.75, None) for _ in range(self.num_X)] # optional bounds for each x
             res = scipy_opt.minimize(lambda x: self.objective(x, obj_params), x0, 
                                      method=self.solver_info['method'], bounds=x_bounds, 
                                      constraints=nonlinear_constraints)
             print('Optimization result:')
             print('Status:', res.success)
             print('Objective value:', res.fun)
+            print('Constraint value:', self.constraint(res.x, cons_params, self.bound))
             print('Decision variables:', res.x)
+
+            return res.x
         elif self.solver_info['optlib'] == 'pyomo':
             assert self.solver_info['method'] in ['gurobi', 'ipopt', 'snopt', 'knitro']
             # self.solver = SolverFactory(self.solver_info['method'])
-
-
-# if __name__ == '__main__':
-#     svr = PCPSolver(4, test_func, lambda x: x[0] + x[1] - 1, 1, '.json', '.json', 
-#                     risk=0.05, approx_risk=0, confidence_error=0.05)
-#     print(svr.get_sample_size())
