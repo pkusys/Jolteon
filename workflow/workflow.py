@@ -3,7 +3,7 @@ from perf_model import StagePerfModel, config_pairs, step_names
 import json
 import os
 import numpy as np
-from utils import MyThread, MyProcess, extract_info_from_log, clear_data
+from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
 import time
 
 class Workflow:
@@ -16,6 +16,9 @@ class Workflow:
         self.stages = []
         self.sources = []
         self.sinks = []
+
+        self.critical_path = None
+        self.secondary_path = None
         
         config = json.load(open(config_file, 'r'))
         self.parse_config(config)
@@ -65,6 +68,12 @@ class Workflow:
 
             if len(stage.children) == 0:
                 self.sinks.append(stage)
+
+        # config critical path and secondary path
+        if 'critical_path' in config:
+            self.critical_path = [self.stages[i] for i in config['critical_path']]
+        if 'secondary_path' in config:
+            self.secondary_path = [self.stages[i] for i in config['secondary_path']]
                 
         for stage in self.sources:
             stage.status = Status.READY
@@ -343,11 +352,35 @@ class Workflow:
                                                  input_size=input_size)
             return cost
 
+    def store_params(self):
+        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+
+        res = res.tolist()
+        param_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        param_dir = os.path.join(param_dir, 'params/')
+        if not os.path.exists(param_dir):
+            os.mkdir(param_dir)
+        param_path = self.workflow_name + '_params.json'
+        param_path = param_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+        param_path = os.path.join(param_dir, param_path)
+        json.dump(res, open(param_path, 'w'))
+        return param_path
+
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
-        res = []
-        for stage in self.stages:
-            res += stage.perf_model.sample_offline(num_samples)
+        res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
+
+        # # Prune the samples
+        # is_greater_than_others = np.ones(res.shape[0], dtype=bool)
+        # # is_less_than_another = np.zeros(res.shape[0], dtype=bool)
+        # for i in range(res.shape[0]):
+        #     is_greater_than_others[i] = np.all(np.all(res[i] > res[np.arange(res.shape[0]) != i], axis=1))
+        #     # is_less_than_another[i] = np.any(np.all(res[i] < res[np.arange(res.shape[0]) != i], axis=1))
+        # vecs = res[is_greater_than_others]
+        # # vecs = vecs[is_less_than_another]
+        # print(vecs.shape[0])
+        
+        res = res.tolist()
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
         if not os.path.exists(sample_dir):
@@ -358,17 +391,121 @@ class Workflow:
         json.dump(res, open(sample_path, 'w'))
         return sample_path
 
-    def generate_func_code(self, code_path):
-        assert isinstance(code_path, str) and code_path.endswith('.py')
-        for stage in self.stages:
-            stage.perf_model.generate_func_code(code_path)
-        pass
-
     def fuse_samples_online(self, sample_path, num_fused_samples):
         assert isinstance(sample_path, str) and sample_path.endswith('.json')
         assert isinstance(num_fused_samples, int) and num_fused_samples > 0
         # TODO: fuse like k-means
         pass
+
+    def load_params(self, file_path):
+        assert isinstance(file_path, str) and file_path.endswith('.json')
+        return json.load(open(file_path, 'r'))
+    
+    '''
+        Generate the python code for the objective function and constraints used by the solver
+    Currently, we use the scipy.optimize as the solver and use numpy as the matrix library. 
+    We now need users to provide the critical path and the (optional) secondary critical path 
+    in order to avoid the occurrence of the np.max() function, which may cause undefined behavior.
+    '''
+    def generate_func_code(self, file_name, critical_path, secondary_path=None, 
+                           cons_mode='latency', solver_type='scipy'):
+        assert isinstance(file_name, str) and file_name.endswith('.py')
+        assert isinstance(critical_path, list) 
+        assert secondary_path is None or isinstance(secondary_path, list)
+        assert cons_mode in ['latency', 'cost']
+        assert solver_type in ['scipy', 'pyomo']
+        code_dir = os.path.dirname(os.path.abspath(__file__))
+        code_path = os.path.join(code_dir, file_name)
+        obj_mode = 'cost' if cons_mode == 'latency' else 'latency'
+
+        parent_ids = [-1 for _ in range(len(self.stages))]
+        for stage in self.stages:
+            if not stage.allow_parallel:
+                for i in range(len(stage.parents)):
+                    if stage.parents[i].allow_parallel:
+                        parent_ids[stage.stage_id] = stage.parents[i].stage_id
+                        break
+                # print('Stage', stage.stage_id, 'parent_id:', parent_ids[stage.stage_id])
+
+        s = 'import numpy as np\n\n'
+        if solver_type == 'pyomo':
+            s += 'import pyomo.environ as pyo\n'
+            s += 'from pyomo.environ import *\n\n'
+
+        # Generate objective function
+        var = 'x'
+        param = 'p'
+        if solver_type == 'scipy':
+            s += 'def objective_func(x, p):\n' + '    return '
+        else:
+            s += 'def objective_func(model):\n' + '    return '
+            var = 'model.x'
+            param = 'model.p'
+        
+        if obj_mode == 'latency':
+            for stage in critical_path:
+                s += stage.perf_model.generate_func_code(obj_mode, var, param, 
+                                                         parent_ids[stage.stage_id], solver_type) + ' + '
+        else:
+            for stage in self.stages:
+                s += stage.perf_model.generate_func_code(obj_mode, var, param, 
+                                                         parent_ids[stage.stage_id], solver_type) + ' + '
+        s = s[:-3]
+        s += '\n\n'
+
+        # Generate constraints
+        bound = ' - b'
+        func2_def = 'def constraint_func_2(x, p, b):\n' + '    return '
+        if solver_type == 'scipy':
+            s += 'def constraint_func(x, p, b):\n' + '    return '
+            if cons_mode == 'cost':
+                func2_def = 'def constraint_func_2(x, p):\n' + '    return '
+        else:
+            s += 'def constraint_func(model):\n' + '    return '
+            bound = ' - model.b <= 0'
+            func2_def = 'def constraint_func_2(model):\n' + '    return '
+
+        if cons_mode == 'latency':
+            for stage in critical_path:
+                s += stage.perf_model.generate_func_code(cons_mode, var, param, 
+                                                         parent_ids[stage.stage_id], solver_type) + ' + '
+            s = s[:-3]
+            s += bound + '\n\n'
+            if secondary_path is not None:
+                s += func2_def
+                for stage in secondary_path:
+                    s += stage.perf_model.generate_func_code(cons_mode, var, param, 
+                                                            parent_ids[stage.stage_id], solver_type) + ' + '
+                s = s[:-3]
+                s += bound + '\n\n'
+        else:
+            for stage in self.stages:
+                s += stage.perf_model.generate_func_code(cons_mode, var, param, 
+                                                         parent_ids[stage.stage_id], solver_type) + ' + '
+            s = s[:-3]
+            s += bound + '\n\n'
+            # The time of the secondary path should be less than or equal to the time of the critical path
+            if secondary_path is not None:
+                s += func2_def
+                critical_set = set(critical_path)
+                secondary_set = set(secondary_path)
+                c_s = critical_set - secondary_set
+                s_c = secondary_set - critical_set
+                assert len(c_s) > 0 and len(s_c) > 0
+                for stage in c_s:
+                    s += stage.perf_model.generate_func_code('latency', var, param, 
+                                                             parent_ids[stage.stage_id], solver_type) + ' + '
+                s = s[:-3] + ' - ('
+                for stage in s_c:
+                    s += stage.perf_model.generate_func_code('latency', var, param, 
+                                                             parent_ids[stage.stage_id], solver_type) + ' + '
+                s = s[:-3] + ')'
+                if solver_type == 'pyomo':
+                    s += ' <= 0'
+                s += '\n\n'
+
+        with open(code_path, 'w') as f:
+            f.write(s)
 
     def close_pools(self):
         for stage in self.stages:
@@ -488,13 +625,37 @@ if __name__ == '__main__':
         print('\n\n')
         wf.close_pools()
     elif test_mode == 'perf_model':
-        wf = Workflow( './ML-pipeline.json')
-        p = wf.profile()
+        # wf = Workflow('./tpcds-dsq95.json')
+        wf = Workflow('./ML-pipeline.json')
+        # p = wf.profile()
         # print(p)
-        # p = '../profiles/ML-Pipeline_profile.json'
-        # wf.train_perf_model(p)
-        # pr =wf.stages[0].perf_model.predict(1024, 1, 4)
-        # wf.print_paths(wf.find_paths())
+        p = '../profiles/ML-Pipeline_profile.json'
+        wf.train_perf_model(p)
+
+        param_path = wf.store_params()
+        t0 = time.time()
+        sample_path = wf.sample_offline(3)
+        t1 = time.time()
+        print('Sample time:', t1-t0, 's\n\n')
+
+        func_path = 'funcs.py'
+        wf.generate_func_code(func_path, wf.critical_path, wf.secondary_path, 
+                              cons_mode='latency')
+
+        # Test solver
+        t0 = time.time()
+        from funcs import objective_func, constraint_func
+        if wf.secondary_path is not None:
+            from funcs import constraint_func_2 
+        bound = 1000
+        obj_params = wf.load_params(param_path)
+        cons_params = wf.load_params(sample_path)
+        solver = PCPSolver(2*len(wf.stages), objective_func, constraint_func, 
+                           bound, obj_params, cons_params)
+        solver.solve()
+        t1 = time.time()
+        print('Solver time:', t1-t0, 's\n\n')
+
         wf.close_pools()
     else:
         raise NotImplementedError

@@ -41,7 +41,7 @@ class Stage:
         
         self.config = {'memory': 2048, 'timeout': 360}
 
-        self.perf_model = StagePerfModel(self.stage_name)
+        self.perf_model = StagePerfModel(self.stage_id, self.stage_name)
         
         self.children = []
         self.parents = []

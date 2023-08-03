@@ -188,3 +188,6 @@ TPC-DS/data/*
 **.zip
 **tmp**
 profiles/*
+samples/*
+params/*
+funcs.py
