@@ -116,15 +116,19 @@ class AnaPerfModel:
         self.comp_params = self.fit_params(size2points_comp, comp_func)
         self.write_params = self.fit_params(size2points_write, io_func)
         
-        # target_dict = size2points_comp
-        # arr_x = list(target_dict.keys())
-        # self.visualize(arr_x, [target_dict[x] for x in arr_x], io_func, self.comp_params)
+        target_dict = size2points_comp
+        arr_x = list(target_dict.keys())
+        self.visualize(arr_x, [target_dict[x] for x in arr_x], io_func, self.comp_params)
             
     def visualize(self, arr_x, arr_y, func, params):
         import matplotlib.pyplot as plt
         plt.scatter(arr_x, arr_y)
+
+        arr_x = np.linspace(min(arr_x), max(arr_x), 100)
         pred_y = [func(x, params[0], params[1]) for x in arr_x]
         plt.plot(arr_x, pred_y, 'r-')
+        plt.xlim(0, max(arr_x) * 1.1)
+        plt.ylim(0, max(max(arr_y), max(pred_y)) * 1.1)
         plt.savefig('vis.png')
 
 if __name__ == '__main__':
