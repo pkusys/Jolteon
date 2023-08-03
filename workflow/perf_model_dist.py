@@ -24,9 +24,11 @@ def eq_vcpu_alloc(mem, num_func):
 
 # Only for one stage
 class DistPerfModel:
-    def __init__(self, stage_name) -> None:
-        assert isinstance(stage_name, str)
-        self.stage_name = stage_name
+    def __init__(self, _stage_id, _stage_name) -> None:
+        assert isinstance(_stage_name, str)
+        assert isinstance(_stage_id, int) and _stage_id >= 0
+        self.stage_name = _stage_name
+        self.stage_id = _stage_id
 
         self.allow_parallel = True
 
