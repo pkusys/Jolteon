@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import math
 import json
 from utils import Distribution
@@ -22,7 +21,13 @@ def eq_vcpu_alloc(mem, num_func):
     # num_vcpu = max(1, num_vcpu)
     return round(num_vcpu * num_func, 1)
 
-# Only for one stage
+'''
+DistPerfModel records the latency distributions of a stage's performance model under different function config.
+Advantage: it is more accurate than analytic model.
+Shortcoming: its search space is too large for configuration under function size and parallelism.
+The interpolation is not accurate enough.
+The search result is not optimal and is also not bounded with a constraint.
+'''
 class DistPerfModel:
     def __init__(self, _stage_id, _stage_name) -> None:
         assert isinstance(_stage_name, str)
@@ -153,10 +158,10 @@ class DistPerfModel:
         self.up_models.append(model)
     
 if __name__ == '__main__':
-    perfmodel0 = DistPerfModel('stage0')
-    perfmodel1 = DistPerfModel('stage1')
-    perfmodel2 = DistPerfModel('stage2')
-    perfmodel3 = DistPerfModel('stage3')
+    perfmodel0 = DistPerfModel(0, 'stage0')
+    perfmodel1 = DistPerfModel(1, 'stage1')
+    perfmodel2 = DistPerfModel(2, 'stage2')
+    perfmodel3 = DistPerfModel(3, 'stage3')
     models = [perfmodel0, perfmodel1, perfmodel2, perfmodel3]
     pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json'
     perfmodel0.update_allow_parallel(False)
