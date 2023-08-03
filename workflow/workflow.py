@@ -4,6 +4,7 @@ import json
 import os
 import numpy as np
 from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
+from multiprocessing import Pool
 import time
 
 class Workflow:
@@ -407,6 +408,27 @@ class Workflow:
         assert isinstance(num_fused_samples, int) and num_fused_samples > 0
         # TODO: fuse like k-means
         pass
+    
+    def update_workflow_config(self, mem_list, parall_list):
+        assert isinstance(parall_list, list) and isinstance(mem_list, list)
+        assert len(parall_list) == len(mem_list)
+        assert len(parall_list) == len(self.stages)
+        
+        configs = list(zip(mem_list, parall_list))
+        
+        tmp_pool = Pool(len(self.stages))
+        
+        ret = tmp_pool.starmap(update_config, configs)
+        
+        pool.close()
+        pool.join()
+        
+        check = True
+        for r in ret:
+            if not r:
+                check = False
+                break
+        return check
 
     def load_params(self, file_path):
         assert isinstance(file_path, str) and file_path.endswith('.json')

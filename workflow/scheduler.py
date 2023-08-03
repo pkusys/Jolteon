@@ -63,7 +63,7 @@ class Orion(Caerus):
         
         memory_config = self.bestfit(latency, confidence)
         
-        print(memory_config)
+        self.workflow.update_workflow_config(memory_config, self.num_funcs)
         
     # Just BFS, but stop and return when one node is statisfied with the latency
     def bestfit(self, latency, confidence):
@@ -118,7 +118,8 @@ if __name__ == '__main__':
     wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
     scheduler = Orion(wf)
     scheduler.profile()
-    scheduler.set_config(64, 30, 0.9)
+    scheduler.set_config(32, 25, 0.9)
+    wf.close_pools()
     
     # for stage in wf.stages:
     #     print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')

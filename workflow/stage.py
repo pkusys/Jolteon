@@ -51,7 +51,7 @@ class Stage:
         self.config = {'memory': 2048, 'timeout': 360}
 
         if perf_model_type == PerfModel.Jolteon.value:
-            self.perf_model = StagePerfModel(self.stage_name)
+            self.perf_model = StagePerfModel(self.stage_id, self.stage_name)
         elif perf_model_type == PerfModel.Distribution.value:
             self.perf_model = DistPerfModel(self.stage_name)
         elif perf_model_type == PerfModel.Analytical.value:
@@ -118,10 +118,20 @@ class Stage:
 
         self.config['memory'] = new_memory
         self.num_func = new_num_func
-        if self.update_lambda_config():
-            return True
-        else:
-            return False
+        
+        ret = True
+        start_time = time.time()
+        # update lambda function configuration util success
+        while not self.update_lambda_config():
+            if time.time() - start_time > 10:
+                ret = False
+                break
+            
+        return ret
+        # if self.update_lambda_config():
+        #     return True
+        # else:
+        #     return False
         
     def register_lambda(self, code_bucket, code_key):
         if self.func_name is None:
