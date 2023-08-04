@@ -135,6 +135,28 @@ class Distribution:
         
         return base_prob + add_prob
     
+    def tail_value(self, percentile):
+        cum_prob = np.cumsum(self.prob)
+        index = None
+        for i in range(len(self.prob)):
+            if cum_prob[i] >= percentile:
+                index = i
+        if index is None:
+            return self.data[-1]
+        if index == 0:
+            lower_val = 0
+            lower_prob = 0
+        else:
+            lower_val = self.data[index - 1]
+            lower_prob = cum_prob[index - 1]
+            
+        upper_val = self.data[index]
+        upper_prob = cum_prob[index]
+        
+        add_val = (percentile - lower_prob) / (upper_prob - lower_prob) * (upper_val - lower_val)
+            
+        return lower_val + add_val
+    
     def reduce_dim(self, dim = 100):
         length = len(self.data)
         if length <= dim:

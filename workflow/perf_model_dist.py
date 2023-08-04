@@ -67,7 +67,7 @@ class DistPerfModel:
             'read' in stage_profile and 'compute' in stage_profile and \
             'write' in stage_profile
 
-        print('Training Orion performance model for %s' % self.stage_name)
+        # print('Training Orion performance model for %s' % self.stage_name)
         
         read_arr = np.array(stage_profile['read'])[1:,:,1]
         com_arr = np.array(stage_profile['compute'])[1:,:,1]
@@ -78,6 +78,8 @@ class DistPerfModel:
         size2points = {}
         
         for idx, config in enumerate(config_pairs):
+            # if idx == 14 or idx == 17:
+            #     continue
             mem = config[0]
             num_func = config[1]
             # adapt to parallel mode
@@ -174,16 +176,20 @@ if __name__ == '__main__':
     for m in models:
         m.train(pro_file)
         
-    perfmodel1.set_func_size(12)
+    perfmodel0.set_func_size(16.)
+    perfmodel1.set_func_size(16.)
+    perfmodel2.set_func_size(16.)
+    perfmodel3.set_func_size(16.)
+    
     t0 = time.time()
-    dist = perfmodel3.calculate()
-    print(dist)
-    dist = perfmodel3.calculate()
-    print(dist)
     dist = perfmodel3.calculate()
     t1 = time.time()
     
     print('Time cost: %f' % (t1 - t0))
+    percentile = 0.8
+    print(dist.tail_value(percentile))
     
-    print(dist)
-    print(dist.probility(23))
+    with open(pro_file, 'r') as f:
+        profile = json.load(f)
+        
+    print(sorted(list(perfmodel1.distributions.keys())))
