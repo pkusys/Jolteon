@@ -53,7 +53,7 @@ class Stage:
         if perf_model_type == PerfModel.Jolteon.value:
             self.perf_model = StagePerfModel(self.stage_id, self.stage_name)
         elif perf_model_type == PerfModel.Distribution.value:
-            self.perf_model = DistPerfModel(self.stage_name)
+            self.perf_model = DistPerfModel(self.stage_id, self.stage_name)
         elif perf_model_type == PerfModel.Analytical.value:
             self.perf_model = None
         else:

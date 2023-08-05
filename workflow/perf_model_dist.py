@@ -4,15 +4,13 @@ import json
 from utils import Distribution
 import time
 
-# config_pairs = [[1792, 1], [1792, 2], [1792, 4], [1792, 8],
+config_pairs = [[1024, 2], [1792, 1], [3584, 2], [7168, 8]]
+
+# config_pairs = [[1024, 2], [1024, 4], [1024, 8],
+#                 [1792, 1], [1792, 2], [1792, 4], [1792, 8],
+#                 [2048, 1], [2048, 2], [2048, 4], [2048, 8],
 #                 [3584, 1], [3584, 2], [3584, 4], [3584, 8],
 #                 [7168, 1], [7168, 2], [7168, 4], [7168, 8]]
-
-config_pairs = [[1024, 2], [1024, 4], [1024, 8],
-                [1792, 1], [1792, 2], [1792, 4], [1792, 8],
-                [2048, 1], [2048, 2], [2048, 4], [2048, 8],
-                [3584, 1], [3584, 2], [3584, 4], [3584, 8],
-                [7168, 1], [7168, 2], [7168, 4], [7168, 8]]
 
 def eq_vcpu_alloc(mem, num_func):
     num_vcpu = mem / 1792
@@ -63,18 +61,22 @@ class DistPerfModel:
             profile = json.load(f)
         assert isinstance(profile, dict) and self.stage_name in profile
         stage_profile = profile[self.stage_name]
-        assert isinstance(stage_profile, dict) and 'cold' in stage_profile and \
+        check_1 = isinstance(stage_profile, dict) and 'cold' in stage_profile and \
             'read' in stage_profile and 'compute' in stage_profile and \
             'write' in stage_profile
+        check_2 = isinstance(stage_profile, dict) and 'e2e' in stage_profile
+        assert check_1 or check_2
 
         # print('Training Orion performance model for %s' % self.stage_name)
-        
-        read_arr = np.array(stage_profile['read'])[1:,:,1]
-        com_arr = np.array(stage_profile['compute'])[1:,:,1]
-        write_arr = np.array(stage_profile['write'])[1:,:,1]
-        cold_arr = np.array(stage_profile['cold'])[1:,:,1]
-        
-        stage_arr = read_arr + com_arr + write_arr + cold_arr
+        if 'e2e' not in stage_profile:
+            read_arr = np.array(stage_profile['read'])[1:,:,1]
+            com_arr = np.array(stage_profile['compute'])[1:,:,1]
+            write_arr = np.array(stage_profile['write'])[1:,:,1]
+            cold_arr = np.array(stage_profile['cold'])[1:,:,1]
+            
+            stage_arr = read_arr + com_arr + write_arr + cold_arr
+        else:
+            stage_arr = np.array(stage_profile['e2e'])[1:,:]
         size2points = {}
         
         for idx, config in enumerate(config_pairs):
@@ -165,7 +167,8 @@ if __name__ == '__main__':
     perfmodel2 = DistPerfModel(2, 'stage2')
     perfmodel3 = DistPerfModel(3, 'stage3')
     models = [perfmodel0, perfmodel1, perfmodel2, perfmodel3]
-    pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json'
+    # pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json'
+    pro_file = '/home/ubuntu/workspace/serverless-bound/profiles/ML-Pipeline_profile_dist.json'
     perfmodel0.update_allow_parallel(False)
     perfmodel3.update_allow_parallel(False)
     
@@ -176,11 +179,11 @@ if __name__ == '__main__':
     for m in models:
         m.train(pro_file)
         
-    perfmodel0.set_func_size(16.)
-    perfmodel1.set_func_size(16.)
-    perfmodel2.set_func_size(16.)
-    perfmodel3.set_func_size(16.)
-    
+    perfmodel0.set_func_size(3.)
+    perfmodel1.set_func_size(3.)
+    perfmodel2.set_func_size(3.)
+    perfmodel3.set_func_size(3.)
+
     t0 = time.time()
     dist = perfmodel3.calculate()
     t1 = time.time()

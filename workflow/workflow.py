@@ -1,5 +1,6 @@
 from stage import Stage, Status, PerfModel
 from perf_model import StagePerfModel, config_pairs, step_names
+from perf_model_dist import config_pairs as dist_config_pairs
 import json
 import os
 import numpy as np
@@ -180,8 +181,87 @@ class Workflow:
     
     def eager_execute(self):
         raise NotImplementedError
+    
+    def profile(self, num_epochs = 2) -> str:
+        if self.perf_model_type == PerfModel.Jolteon.value:
+            return self.profile_jolteon(num_epochs)
+        elif self.perf_model_type == PerfModel.Distribution.value:
+            return self.profile_dist(num_epochs)
+        elif self.perf_model_type == PerfModel.Analytical.value:
+            raise NotImplementedError
+        else:
+            raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
+        
+    def profile_dist(self, num_epochs) -> str:
+        assert isinstance(num_epochs, int) and num_epochs > 0
+        res = dict()
+        for stage in self.stages:
+            res[stage.stage_name] = dict()
+            res[stage.stage_name]['e2e'] = np.zeros((num_epochs, len(dist_config_pairs))).tolist()
+            
+        try:
+            for config_pair in dist_config_pairs:
+                print('Config:', config_pair)
+                for stage in self.stages:
+                    mem_size, num_func = config_pair
+                    if not stage.update_config(mem_size, num_func):
+                        raise Exception('Config update failed')
+                    print('Updated {} config'.format(stage.stage_name))
 
-    def profile(self, num_epochs=2) -> str:
+                for epoch_id in range(num_epochs):
+                    print('Epoch:', epoch_id)
+                    self.init_stage_status()
+                    clear_dir = self.workflow_name + '/stage'
+                    clear_dir = clear_dir.replace('-', '_')  # adequate for ML-Pipeline and ML_Pipeline
+                    clear_data(clear_dir)
+                    epoch_res = self.lazy_execute()
+
+                    infos = []
+                    time_list = []
+                    times_list = []
+                    for ids, r in enumerate(epoch_res):
+                        l = []
+                        for ids_, result in enumerate(r):
+                            if ids_ == 0:
+                                time_list.append(result)
+                                continue
+                            info = extract_info_from_log(result[1])
+                            infos.append(info)
+                            rd = json.loads(result[0])
+                            if 'statusCode' not in rd:
+                                print(rd)
+                                raise Exception('Lambda execution error')
+                            rd = json.loads(rd['body'])
+                            l.append(rd['breakdown'])
+                        times_list.append(l)
+                    cost = 0
+                    for info in infos:
+                        cost += info['bill']
+                    print('Cost:', cost, '$')
+                    for idx, t in enumerate(time_list):
+                        stage_name = self.stages[idx].stage_name
+                        config_id = dist_config_pairs.index(config_pair)
+                        res[stage_name]['e2e'][epoch_id][config_id] = t
+                    print('\n\n')
+                print('\n\n\n')
+
+            # Persist the results
+            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            prof_dir = os.path.join(prof_dir, 'profiles/')
+            if not os.path.exists(prof_dir):
+                os.mkdir(prof_dir)
+            prof_path = self.workflow_name + '_profile_dist.json'
+            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+            prof_path = os.path.join(prof_dir, prof_path)
+            json.dump(res, open(prof_path, 'w'))
+            return prof_path
+            
+        except Exception as e:
+            print(res)
+            print('\n\n')
+            raise e
+
+    def profile_jolteon(self, num_epochs) -> str:
         # Use different configurations to profile, 
         # profile multiple epochs under the same configuration
         # and write the results to a storage (S3 or local) or pass to the performance model
@@ -275,7 +355,7 @@ class Workflow:
             prof_dir = os.path.join(prof_dir, 'profiles/')
             if not os.path.exists(prof_dir):
                 os.mkdir(prof_dir)
-            prof_path = self.workflow_name + '_profile.json'
+            prof_path = self.workflow_name + '_profile_jolteon.json'
             prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
             prof_path = os.path.join(prof_dir, prof_path)
             json.dump(res, open(prof_path, 'w'))
@@ -659,8 +739,8 @@ if __name__ == '__main__':
         wf.close_pools()
     elif test_mode == 'perf_model':
         # wf = Workflow('./tpcds-dsq95.json')
-        wf = Workflow('./ML-pipeline.json')
-        # p = wf.profile()
+        wf = Workflow('./ML-pipeline.json', 1)
+        # p = wf.profile(5)
         # print(p)
         p = '../profiles/ML-Pipeline_profile.json'
         wf.train_perf_model(p)
