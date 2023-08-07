@@ -1,5 +1,3 @@
-from perf_model import StagePerfModel
-from perf_model_dist import DistPerfModel
 import boto3
 from multiprocessing.pool import ThreadPool
 from multiprocessing import cpu_count
@@ -8,6 +6,10 @@ import json
 import base64
 from enum import Enum
 import time
+
+from perf_model import StagePerfModel
+from perf_model_dist import DistPerfModel
+from perf_model_analytic import AnaPerfModel
 
 # extrace stage from /tpcds/stage/intermediate
 def extract_name(name):
@@ -55,7 +57,7 @@ class Stage:
         elif perf_model_type == PerfModel.Distribution.value:
             self.perf_model = DistPerfModel(self.stage_id, self.stage_name)
         elif perf_model_type == PerfModel.Analytical.value:
-            self.perf_model = None
+            self.perf_model = AnaPerfModel(self.stage_id, self.stage_name)
         else:
             raise ValueError('Invalid performance model type: %d' % perf_model_type)
         

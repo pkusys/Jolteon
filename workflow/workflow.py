@@ -1,12 +1,13 @@
-from stage import Stage, Status, PerfModel
-from perf_model import StagePerfModel, config_pairs, step_names
-from perf_model_dist import config_pairs as dist_config_pairs
+from multiprocessing import Pool
+import time
 import json
 import os
 import numpy as np
+
+from stage import Stage, Status, PerfModel
+from perf_model import StagePerfModel, config_pairs, step_names
+from perf_model_dist import config_pairs as dist_config_pairs
 from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
-from multiprocessing import Pool
-import time
 
 class Workflow:
     def __init__(self, config_file, perf_model_type = 0, boto3_client_ = None) -> None:

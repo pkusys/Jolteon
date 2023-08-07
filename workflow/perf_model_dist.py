@@ -1,8 +1,9 @@
 import numpy as np
 import math
 import json
-from utils import Distribution
 import time
+
+from utils import Distribution
 
 config_pairs = [[1024, 2], [1792, 1], [3584, 2], [7168, 8]]
 

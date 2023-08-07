@@ -119,6 +119,12 @@ class AnaPerfModel:
         target_dict = size2points_comp
         arr_x = list(target_dict.keys())
         self.visualize(arr_x, [target_dict[x] for x in arr_x], io_func, self.comp_params)
+        
+    def get_params(self):
+        a = sum([self.read_params[0], self.comp_params[0], self.write_params[0]])
+        b = sum([self.read_params[1], self.comp_params[1], self.write_params[1]])
+        
+        return a, b
             
     def visualize(self, arr_x, arr_y, func, params):
         import matplotlib.pyplot as plt
@@ -132,9 +138,10 @@ class AnaPerfModel:
         plt.savefig('vis.png')
 
 if __name__ == '__main__':
-    perfmodel = AnaPerfModel(2, 'stage2')
+    perfmodel = AnaPerfModel(1, 'stage1')
     pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json'
     perfmodel.update_allow_parallel(False)
     
     perfmodel.train(pro_file)
     
+    print(perfmodel.get_params())
