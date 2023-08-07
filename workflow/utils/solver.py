@@ -54,7 +54,7 @@ class PCPSolver:
         # TODO: add gurobi, use scipy as the default solver
         self.solver_info = solver_info
         # Sample size
-        # self.num_samples = self.sample_size()
+        self.num_samples = self.sample_size()
         self.num_samples = 3  # for testing
         self.num_fused_samples = self.num_samples  
         # TODO: implement the fusion of samples
