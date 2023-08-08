@@ -1,7 +1,7 @@
 # Video-Analytics
 
 This folder contains the source code of the Video-Analytics application.
-Application, Video-Analytics, consists of four stages: Split, Extrace, Preprocess and Classify
+Application, Video-Analytics, consists of four stages: Split, Extract, Preprocess and Classify
 
 ## Folder Contents
 1. [Split](Split/): Code for **Split** function. This stage preprocesses the video data, which split the videos into chunks. To deploy *Split*, run:
