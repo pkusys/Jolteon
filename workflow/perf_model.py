@@ -21,7 +21,7 @@ def eq_vcpu_alloc(mem, num_func):
     # num_vcpu = math.ceil(mem / 1792)
     # num_vcpu = math.floor(mem / 1792)
     # num_vcpu = max(1, num_vcpu)
-    return num_vcpu * num_func
+    return round(num_vcpu * num_func, 1)
 
 def io_func(x, a, b):
     return a / x + b

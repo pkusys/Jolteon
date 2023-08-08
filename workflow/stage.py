@@ -1,4 +1,3 @@
-from perf_model import StagePerfModel
 import boto3
 from multiprocessing.pool import ThreadPool
 from multiprocessing import cpu_count
@@ -7,6 +6,10 @@ import json
 import base64
 from enum import Enum
 import time
+
+from perf_model import StagePerfModel
+from perf_model_dist import DistPerfModel
+from perf_model_analytic import AnaPerfModel
 
 # extrace stage from /tpcds/stage/intermediate
 def extract_name(name):
@@ -24,11 +27,19 @@ class Status(Enum):
     READY = 1
     RUNNING = 2
     FINISHED = 3
+    
+class PerfModel(Enum):
+    Jolteon = 0
+    Distribution = 1
+    Analytical = 2
 
 class Stage:
-    def __init__(self, workflow_name_, stage_name_, stage_id_, func_name_ = None) -> None:
+    def __init__(self, workflow_name_, stage_name_, stage_id_, perf_model_type = 0, func_name_ = None) -> None:
         assert isinstance(stage_name_, str)
         assert isinstance(stage_id_, int)
+        
+        # 0 for Jolteon, 1 for Orion distribution model, 2 for Ditto Caerus Locus analytical model
+        assert isinstance(perf_model_type, int)
         
         self.stage_name = stage_name_
         self.stage_id = stage_id_
@@ -41,7 +52,14 @@ class Stage:
         
         self.config = {'memory': 2048, 'timeout': 360}
 
-        self.perf_model = StagePerfModel(self.stage_id, self.stage_name)
+        if perf_model_type == PerfModel.Jolteon.value:
+            self.perf_model = StagePerfModel(self.stage_id, self.stage_name)
+        elif perf_model_type == PerfModel.Distribution.value:
+            self.perf_model = DistPerfModel(self.stage_id, self.stage_name)
+        elif perf_model_type == PerfModel.Analytical.value:
+            self.perf_model = AnaPerfModel(self.stage_id, self.stage_name)
+        else:
+            raise ValueError('Invalid performance model type: %d' % perf_model_type)
         
         self.children = []
         self.parents = []
@@ -52,6 +70,7 @@ class Stage:
         
         self.allow_parallel = True
         
+        # 64 is a magic number, according to you central server's CPU cores
         self.pool_size = 64
         self.pool = Pool(self.pool_size)
         # self.boto3_client = boto3.client('lambda')
@@ -101,10 +120,20 @@ class Stage:
 
         self.config['memory'] = new_memory
         self.num_func = new_num_func
-        if self.update_lambda_config():
-            return True
-        else:
-            return False
+        
+        ret = True
+        start_time = time.time()
+        # update lambda function configuration util success
+        while not self.update_lambda_config():
+            if time.time() - start_time > 10:
+                ret = False
+                break
+            
+        return ret
+        # if self.update_lambda_config():
+        #     return True
+        # else:
+        #     return False
         
     def register_lambda(self, code_bucket, code_key):
         if self.func_name is None:
