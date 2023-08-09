@@ -26,3 +26,12 @@ def get_suffix(filename):
     chunk_id = fn[-1]
     
     return file_id, chunk_id
+
+def get_suffix_str(filename):
+    assert isinstance(filename, str)
+    fn = filename.split('.')[0]
+    fn = fn.split('_')
+    file_id = fn[-2]
+    chunk_id = fn[-1]
+    
+    return file_id + '_' + chunk_id

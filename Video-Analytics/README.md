@@ -1,7 +1,8 @@
 # Video-Analytics
 
 This folder contains the source code of the Video-Analytics application.
-Application, Video-Analytics, consists of four stages: Split, Extract, Preprocess and Classify
+Application, Video-Analytics, consists of four stages: Split, Extract, Preprocess and Classify.
+Get the yolo model through [imageai-doc](https://imageai.readthedocs.io/en/latest/video/index.html?highlight=yolo-tiny#video-and-live-feed-detection-and-analysis) in this folder before depolying.
 
 ## Folder Contents
 1. [Split](src/split.py): Code for **Split** function. This stage preprocesses the video data, which split the videos into chunks. To deploy *Split*, run:
@@ -20,7 +21,8 @@ bash depoly_extract.sh
 bash deploy_preprocess.sh
 ```
 
-4. [Test](LGB-Code/): Code for **Test** function. This stage aggreate the multiple forests into a single forest and test the final model with a held-out test dataset.
+4. [Test](src/classify.py): Code for **Classify** function. This stage YOLO model to detect the feature
+in each frame (1000 classes) and output the classification results in json file.
 ```
-bash
+bash deploy_classify.sh
 ```

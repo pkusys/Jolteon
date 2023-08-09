@@ -168,6 +168,8 @@ cython_debug/
 *.so
 *.dylib
 *.pyc
+*.h5
+*.pt
 *~
 /config.*
 /aclocal.m4
