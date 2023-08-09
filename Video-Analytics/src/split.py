@@ -3,10 +3,9 @@ from boto3.s3.transfer import TransferConfig
 import time
 from moviepy.video.io.VideoFileClip import VideoFileClip
 
-
 bucketName = 'serverless-bound'
 
-def split_videos(input_adresses, output_adress, chunk_size = 10, task_id = 0, file_start_id = 0):
+def split_videos(input_adresses, output_adress, task_id = 0, file_start_id = 0, chunk_size = 10):
     assert isinstance(input_adresses, list)
     if len(input_adresses) > 0:
         assert isinstance(input_adresses[0], str)
@@ -31,6 +30,7 @@ def split_videos(input_adresses, output_adress, chunk_size = 10, task_id = 0, fi
         
         start_comp = int(round(time.time() * 1000)) / 1000.0
         vc = VideoFileClip(filename, verbose=False)
+        vc.write_videofile
         video_len = int(vc.duration)
         
         start_size = 0
@@ -44,12 +44,13 @@ def split_videos(input_adresses, output_adress, chunk_size = 10, task_id = 0, fi
             tmp_filename = "/tmp/clip.mp4"
             
             clip_vc = vc.subclip(start_size, end_size)
-            clip_vc.write_videofile(tmp_filename, logger=None)
+            clip_vc.write_videofile(tmp_filename, temp_audiofile="/tmp/temp-audio.mp3", logger=None)
+            del clip_vc
             end_comp = int(round(time.time() * 1000)) / 1000.0
             comp_time += end_comp - start_comp
             
             start_write = int(round(time.time() * 1000)) / 1000.0
-            s3_clip_name = output_adress + '/video_' + str(file_id) +  '_' + str(cnt) + '.mp4'
+            s3_clip_name = output_adress + '_' + str(file_id) +  '_' + str(cnt) + '.mp4'
             
             s3_client.upload_file(tmp_filename, bucketName, s3_clip_name, Config=config)
             

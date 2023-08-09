@@ -20,5 +20,5 @@ RUN pip3 install numpy moviepy
 COPY lambda_function.py   ./
 COPY utils.py   ./
 COPY split.py ./
-RUN hahah
+COPY utils.py ./
 CMD ["lambda_function.handler"]      
