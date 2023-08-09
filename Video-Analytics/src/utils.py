@@ -17,3 +17,12 @@ def get_files(bucket_name, key):
     else:
         raise Exception('No files found')
     return res
+
+def get_suffix(filename):
+    assert isinstance(filename, str)
+    fn = filename.split('.')[0]
+    fn = fn.split('_')
+    file_id = fn[-2]
+    chunk_id = fn[-1]
+    
+    return file_id, chunk_id

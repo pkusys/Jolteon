@@ -1,24 +1,14 @@
 import boto3
 from boto3.s3.transfer import TransferConfig
 import time
-from moviepy.video.io.VideoFileClip import VideoFileClip
 import numpy as np
-from PIL import Image
+import cv2
 
 from utils import get_suffix
 
-def calculate_average_pixel_value(image):
-    # Convert image to grayscale image
-    gray_image = np.mean(image, axis=2).astype(np.uint8)
-    
-    # Calculate the average value of pixels
-    average_pixel_value = np.mean(gray_image)
-    
-    return average_pixel_value
-
 bucketName = 'serverless-bound'
 
-def extrace_frames(input_adresses, output_adress):
+def sharpening_filter(input_adresses, output_adress):
     assert isinstance(input_adresses, list)
     if len(input_adresses) > 0:
         assert isinstance(input_adresses[0], str)
@@ -35,7 +25,7 @@ def extrace_frames(input_adresses, output_adress):
     
     for idx, s3_fn in enumerate(input_adresses):
         start_read = int(round(time.time() * 1000)) / 1000.0
-        filename = "/tmp/src.mp4"
+        filename = "/tmp/src.jpg"
         f = open(filename, "wb")
         s3_client.download_fileobj(bucketName, s3_fn, f, Config=config)
         f.close()
@@ -44,40 +34,28 @@ def extrace_frames(input_adresses, output_adress):
         
         start_comp = int(round(time.time() * 1000)) / 1000.0
         file_id, chunk_id = get_suffix(s3_fn)
-        best_frame = None
-        best_metric = float('-inf')
-        video_clip = VideoFileClip(filename, verbose=False)
+        image = cv2.imread(filename)
         
-        for frame in video_clip.iter_frames(fps=0.5, dtype='uint8'):
-            frame_metric = calculate_average_pixel_value(frame)
-            if frame_metric > best_metric:
-                best_metric = frame_metric
-                best_frame = frame
-        pil_image = Image.fromarray(best_frame)
+        # A magical kernel, it doesnot affect the system performance
+        sharpening_kernel = np.array([[-1, -1, -1],
+                              [-1,  9, -1],
+                              [-1, -1, -1]])
+        
+        sharpened_image = cv2.filter2D(image, -1, sharpening_kernel)
+        
+        
+        tmp_filename = "/tmp/filter_frame.jpg"
+        cv2.imwrite(tmp_filename, sharpened_image)
         
         end_comp = int(round(time.time() * 1000)) / 1000.0
         comp_time += end_comp - start_comp
         
         start_write = int(round(time.time() * 1000)) / 1000.0
-        
-        tmp_filename = "/tmp/representative_frame.jpg"
-        pil_image.save(tmp_filename)
-        
         out_a = output_adress + '_' + file_id + '_' + chunk_id + '.jpg'
         s3_client.upload_file(tmp_filename, bucketName, out_a, Config=config)
-        
-        video_clip.close()
-        
         end_write = int(round(time.time() * 1000)) / 1000.0
         write_time += end_write - start_write
-        
+    
     end = int(round(time.time() * 1000)) / 1000.0
     
     return [read_time, comp_time, write_time, end - start]
-
-
-if __name__ == '__main__':
-    file_li = ['Video-Analytics/stage0/clip_video_0_0.mp4']
-    output_adress = 'Video-Analytics/stage1/clip_frame'
-    ret = extrace_frames(file_li, output_adress)
-    print(ret)
