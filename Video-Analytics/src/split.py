@@ -68,6 +68,6 @@ def split_videos(input_adresses, output_adress, task_id = 0, file_start_id = 0, 
         
 if __name__ == '__main__':
     file_li = ['Video-Analytics/dataset/video_0.mp4']
-    output_adress = 'Video-Analytics/stage0'
+    output_adress = 'Video-Analytics/stage0/clip_video'
     ret = split_videos(file_li, output_adress)
     print(ret)

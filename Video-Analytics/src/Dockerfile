@@ -15,10 +15,11 @@ RUN wget http://mirror.centos.org/centos/7/os/x86_64/Packages/libva-1.8.3-1.el7.
 
 RUN yum install -y ffmpeg
 
-RUN pip3 install numpy moviepy
+RUN pip3 install numpy moviepy Pillow
 
 COPY lambda_function.py   ./
 COPY utils.py   ./
 COPY split.py ./
 COPY utils.py ./
+COPY extract.py ./
 CMD ["lambda_function.handler"]      

@@ -4,12 +4,12 @@ This folder contains the source code of the Video-Analytics application.
 Application, Video-Analytics, consists of four stages: Split, Extract, Preprocess and Classify
 
 ## Folder Contents
-1. [Split](Split/): Code for **Split** function. This stage preprocesses the video data, which split the videos into chunks. To deploy *Split*, run:
+1. [Split](src/split.py): Code for **Split** function. This stage preprocesses the video data, which split the videos into chunks. To deploy *Split*, run:
 ```
 bash
 ```
 
-2. [Train](LGB-Code/): Code for **Train** function. This stage trains a user-specified number of decision tree model with LightGBM. A lambda function consists of a number of processes. Each process is responsible for training a tree model.
+2. [Extract](src/extract.py): Code for **Train** function. This stage trains a user-specified number of decision tree model with LightGBM. A lambda function consists of a number of processes. Each process is responsible for training a tree model.
 To deploy *Train*, run: 
 ```
 bash
