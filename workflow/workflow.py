@@ -173,7 +173,7 @@ class Workflow:
             
         res_list = []
         for thread in threads:
-            res_list.append(thread.result)
+            res_list.append(thread.result[0])
             
         return res_list
     
@@ -635,7 +635,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'perf_model' # 'step_by_step' 'lazy' 'perf_model'
+    test_mode = 'lazy' # 'step_by_step' 'lazy' 'perf_model'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './tpcds-dsq95.json')
@@ -687,11 +687,14 @@ if __name__ == '__main__':
         print('\n\n')
         wf.close_pools()
     elif test_mode == 'lazy':
-        wf = Workflow( './ML-pipeline.json')
-        wf.stages[0].num_func = 1
-        wf.stages[1].num_func = 3
-        wf.stages[2].num_func = 3
-        wf.stages[3].num_func = 1
+        wf = Workflow( './Video-analytics.json')
+        wf.stages[0].num_func = 4
+        wf.stages[1].num_func = 4
+        wf.stages[2].num_func = 4
+        wf.stages[3].num_func = 4
+        
+        # wf.stages[0].status = Status.RUNNING
+        # wf.stages[0].execute()
         # wf = Workflow( './tpcds-dsq95.json')
         # wf.stages[0].num_func = 20
         # wf.stages[1].num_func = 1

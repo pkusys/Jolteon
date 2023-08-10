@@ -161,6 +161,8 @@ cython_debug/
 
 *.mp4
 *.swp
+*.png
+*.pdf
 *.swo
 *.o
 *.a

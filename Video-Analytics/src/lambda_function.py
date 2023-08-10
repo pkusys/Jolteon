@@ -14,8 +14,8 @@ def handler(event, context):
         num_tasks = int(event['num_tasks'])        
         task_id = int(event['task_id'])
         
-        input_address_str = event['input_address']
-        output_address = event['output_address']
+        input_address_str = event['input_address'][0]
+        output_address = event['output_address'][0]
         
         input_address = get_files(bucketName, input_address_str)
         
@@ -44,8 +44,8 @@ def handler(event, context):
         num_tasks = int(event['num_tasks'])        
         task_id = int(event['task_id'])
         
-        input_address_str = event['input_address']
-        output_address = event['output_address']
+        input_address_str = event['input_address'][0]
+        output_address = event['output_address'][0]
         
         input_address = get_files(bucketName, input_address_str)
         
@@ -74,8 +74,8 @@ def handler(event, context):
         task_id = int(event['task_id'])
         mod_number = int(event['mod_number'])
         
-        input_address_str = event['input_address']
-        output_address = event['output_address']
+        input_address_str = event['input_address'][0]
+        output_address = event['output_address'][0]
         
         input_address = get_files(bucketName, input_address_str)
         
@@ -113,7 +113,7 @@ def handler(event, context):
         task_id = int(event['task_id'])
         
         input_address_li = event['input_address']
-        output_address = event['output_address']
+        output_address = event['output_address'][0]
         
         assert len(input_address_li) == 2
         
@@ -172,12 +172,11 @@ def handler(event, context):
     
 if __name__ == '__main__':
     event = {
-        "func_id": 3,
-        "num_tasks": 1,
-        "mod_number": 1,
+        "func_id": 0,
+        "num_tasks": 4,
         "num_vcpu": 4,
-        "task_id": 0,
-        "input_address": ["Video-Analytics/stage1/clip_frame", "Video-Analytics/stage2/filter_frame"],
-        "output_address": "Video-Analytics/stage3/result"
+        "task_id": 3,
+        "input_address": ["Video-Analytics/dataset/video"],
+        "output_address": ["Video-Analytics/stage0/clip_video"]
     }
     handler(event, None)

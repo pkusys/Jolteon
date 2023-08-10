@@ -1,0 +1,39 @@
+{
+    "workflow_name": "Video-Analytics",
+    "num_stages": 4,
+    "0": {
+        "stage_name": "stage0",
+        "parents": [],
+        "children": [1],
+        "input_files": ["Video-Analytics/dataset/video"],
+        "output_files": ["Video-Analytics/stage0/video_chunk"],
+        "read_pattern": ["read_table"],
+        "extra_args": {"num_partitions" : 4}
+    },
+    "1": {
+        "stage_name": "stage1",
+        "parents": [0],
+        "children": [2, 3],
+        "input_files": ["Video-Analytics/stage0/video_chunk"],
+        "output_files": ["Video-Analytics/stage1/frame"],
+        "read_pattern": ["read"]
+    },
+    "2": {
+        "stage_name": "stage2",
+        "parents": [1],
+        "children": [3],
+        "input_files": ["Video-Analytics/stage1/frame"],
+        "output_files": ["Video-Analytics/stage2/filter_frame"],
+        "read_pattern": ["read"],
+        "extra_args": {"mod_number" : 8}
+    },
+    "3": {
+        "stage_name": "stage3",
+        "parents": [1, 2],
+        "children": [],
+        "input_files": ["Video-Analytics/stage1/frame", "Video-Analytics/stage2/filter_frame"],
+        "output_files": ["Video-Analytics/stage3/result"],
+        "read_pattern": ["read", "read"]
+    },
+    "critical_path": [0, 1, 2, 3]
+}
