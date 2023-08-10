@@ -13,6 +13,7 @@ def handler(event, context):
     if event['func_id'] == 0:
         num_tasks = int(event['num_tasks'])        
         task_id = int(event['task_id'])
+        chunk_size = int(event['chunk_size'])
         
         input_address_str = event['input_address'][0]
         output_address = event['output_address'][0]
@@ -38,7 +39,7 @@ def handler(event, context):
         import split
         split_inputs = input_address[start_file_id:start_file_id + num_files]
         
-        res = split.split_videos(split_inputs, output_address, task_id, start_file_id)
+        res = split.split_videos(split_inputs, output_address, task_id, start_file_id, chunk_size)
         
     elif event['func_id'] == 1:
         num_tasks = int(event['num_tasks'])        
@@ -82,7 +83,7 @@ def handler(event, context):
         adresses = []
         for idx, file in enumerate(input_address):
             file_id, chunk_id = get_suffix(file)
-            if int(file_id) % mod_number == task_id:
+            if int(chunk_id) % mod_number == 0:
                 adresses.append(file)
         input_address = adresses
         
@@ -172,11 +173,12 @@ def handler(event, context):
     
 if __name__ == '__main__':
     event = {
-        "func_id": 0,
+        "func_id": 2,
         "num_tasks": 4,
+        "mod_number": 2,
         "num_vcpu": 4,
-        "task_id": 3,
-        "input_address": ["Video-Analytics/dataset/video"],
-        "output_address": ["Video-Analytics/stage0/clip_video"]
+        "task_id": 0,
+        "input_address": ["Video-Analytics/stage1/frame"],
+        "output_address": ["Video-Analytics/stage2/filter_frame"]
     }
     handler(event, None)

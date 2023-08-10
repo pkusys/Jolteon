@@ -8,7 +8,7 @@
         "input_files": ["Video-Analytics/dataset/video"],
         "output_files": ["Video-Analytics/stage0/video_chunk"],
         "read_pattern": ["read_table"],
-        "extra_args": {"num_partitions" : 4}
+        "extra_args": {"num_partitions" : 4, "chunk_size" : 30}
     },
     "1": {
         "stage_name": "stage1",
@@ -25,7 +25,7 @@
         "input_files": ["Video-Analytics/stage1/frame"],
         "output_files": ["Video-Analytics/stage2/filter_frame"],
         "read_pattern": ["read"],
-        "extra_args": {"mod_number" : 8}
+        "extra_args": {"mod_number" : 2}
     },
     "3": {
         "stage_name": "stage3",

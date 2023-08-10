@@ -494,15 +494,12 @@ class Workflow:
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
         assert len(parall_list) == len(mem_list)
         assert len(parall_list) == len(self.stages)
+
+        ret = []
         
-        configs = list(zip(mem_list, parall_list))
-        
-        tmp_pool = Pool(len(self.stages))
-        
-        ret = tmp_pool.starmap(update_config, configs)
-        
-        pool.close()
-        pool.join()
+        for i in range(len(self.stages)):
+            r = self.stages[i].update_config(mem_list[i], parall_list[i])
+            ret.append(r)
         
         check = True
         for r in ret:
