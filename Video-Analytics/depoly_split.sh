@@ -21,7 +21,7 @@ aws lambda create-function \
 --code ImageUri=325476609965.dkr.ecr.us-east-1.amazonaws.com/video-img:latest \
 --package-type Image \
 --timeout 360 \
---memory-size 1792
+--memory-size 7168
 
 # Update the function code
 # aws lambda update-function-code \
