@@ -23,11 +23,15 @@ def classify_images(input_adresses, output_adress):
     write_time = 0
     comp_time = 0
     
+    start_read = int(round(time.time() * 1000)) / 1000.0
     detector = ObjectDetection()
     detector.setModelTypeAsTinyYOLOv3()
 
     detector.setModelPath('./tiny-yolov3.pt')
     detector.loadModel()
+    end_read = int(round(time.time() * 1000)) / 1000.0
+    
+    read_time += end_read - start_read
     
     for idx, s3_fn in enumerate(input_adresses):
         start_read = int(round(time.time() * 1000)) / 1000.0

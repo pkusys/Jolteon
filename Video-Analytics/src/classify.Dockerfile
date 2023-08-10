@@ -10,7 +10,11 @@ RUN rm /var/lang/bin/python && ln -s /usr/bin/python3.7 /var/lang/bin/python
 
 RUN pip3.7 install urllib3==1.26.7
 
-RUN pip3.7 install torch torchvision tensorflow-cpu imageai opencv-python
+RUN pip3.7 install torch==1.9.0+cpu torchvision==0.10.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+
+RUN pip3.7 install tensorflow-cpu 
+
+RUN pip3.7 install imageai opencv-python
 
 RUN pip3.7 install awslambdaric
 
