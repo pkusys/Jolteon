@@ -8,7 +8,8 @@ sudo apt install ffmpeg
 pip install pytube
 pip install moviepy
 mkdir -p ./data/clip_data/
-
+python crawler.py
+python clip.py
 ```
 If you want to generate a new **video_list** (the provided url may expire), please replace the **API_KEY** with your own in [video_list.py](./video_list.py) and run the command.
 ```

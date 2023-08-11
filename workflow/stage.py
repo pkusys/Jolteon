@@ -49,6 +49,7 @@ class Stage:
         self.status = Status.WAITING
         
         self.num_func = 1
+        self.max_num_func = None
         
         self.config = {'memory': 2048, 'timeout': 360}
 
@@ -167,9 +168,9 @@ class Stage:
 
         # print('Lambda invocation time: ', t1 - t0)
         
-        return [resp_payload, log_result]
+        return [resp_payload, log_result, True]
         
-    def execute(self, dummy=0):
+    def execute(self, dummy = 0):
         assert dummy == 0 or dummy == 1
         assert self.status == Status.RUNNING
         if not self.allow_parallel:
@@ -233,7 +234,8 @@ class Stage:
         
         if self.extra_args is not None:
             for k in self.extra_args.keys():
-                assert k not in payload.keys()
+                if k in payload.keys():
+                   print('Warning: key ' + k + ' already exists in payload.') 
                 payload[k] = self.extra_args[k]
             
         # construct payload for each lambda function invocation
@@ -256,6 +258,20 @@ class Stage:
         
         t1 = time.time()
         
+        check = True
+        for item in ret_list:
+            if not isinstance(item, list):
+                check = False
+                break
+            
+            if len(item) != 3:
+                check = False
+                break
+            
+            if not item[2]:
+                check = False
+                break
+        
         # print(self.stage_id, 'Funtion invocation time: ', t1 - t0, 's')
         
         ret_list.insert(0, t1 - t0)
@@ -263,7 +279,7 @@ class Stage:
         # move it to workflow execution for thread safety
         # self.status = Status.FINISHED
         
-        return ret_list
+        return ret_list, check
     
     def close_pool(self):
         if self.pool is not None:

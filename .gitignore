@@ -161,6 +161,8 @@ cython_debug/
 
 *.mp4
 *.swp
+*.png
+*.pdf
 *.swo
 *.o
 *.a
@@ -168,6 +170,8 @@ cython_debug/
 *.so
 *.dylib
 *.pyc
+*.h5
+*.pt
 *~
 /config.*
 /aclocal.m4
