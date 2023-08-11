@@ -159,8 +159,10 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-
+*.mp4
 *.swp
+*.png
+*.pdf
 *.swo
 *.o
 *.a
@@ -168,6 +170,8 @@ cython_debug/
 *.so
 *.dylib
 *.pyc
+*.h5
+*.pt
 *~
 /config.*
 /aclocal.m4
