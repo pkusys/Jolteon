@@ -189,7 +189,7 @@ class Workflow:
         elif self.perf_model_type == PerfModel.Distribution.value:
             return self.profile_dist(num_epochs)
         elif self.perf_model_type == PerfModel.Analytical.value:
-            raise NotImplementedError
+            return self.profile_analytic(num_epochs)
         else:
             raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
         
@@ -257,6 +257,92 @@ class Workflow:
             json.dump(res, open(prof_path, 'w'))
             return prof_path
             
+        except Exception as e:
+            print(res)
+            print('\n\n')
+            raise e
+
+    def profile_analytic(self, num_epochs) -> str:
+        assert isinstance(num_epochs, int) and num_epochs > 0 
+        
+        res = dict()
+        for stage in self.stages:
+            res[stage.stage_name] = dict()
+            for step_name in step_names:
+                res[stage.stage_name][step_name] = np.zeros((num_epochs, len(config_pairs), 2)).tolist()
+        
+        try:
+            for config_pair in config_pairs:
+                print('Config:', config_pair)
+                for stage in self.stages:
+                    mem_size, num_func = config_pair
+                    if not stage.update_config(mem_size, num_func):
+                        raise Exception('Config update failed')
+                
+                for epoch_id in range(num_epochs):
+                    print('Epoch:', epoch_id)
+                    self.init_stage_status()
+                    clear_dir = self.workflow_name + '/stage'
+                    clear_dir = clear_dir.replace('-', '_')  # adequate for ML-Pipeline and ML_Pipeline
+                    clear_data(clear_dir)
+                    epoch_res = self.lazy_execute()
+
+                    infos = []
+                    time_list = []
+                    times_list = []
+                    for ids, r in enumerate(epoch_res):
+                        l = []
+                        for ids_, result in enumerate(r):
+                            if ids_ == 0:
+                                time_list.append(result)
+                                continue
+                            info = extract_info_from_log(result[1])
+                            infos.append(info)
+                            rd = json.loads(result[0])
+                            if 'statusCode' not in rd:
+                                print(rd)
+                                raise Exception('Lambda execution error')
+                            rd = json.loads(rd['body'])
+                            l.append(rd['breakdown'])
+                        times_list.append(l)
+                    cost = 0
+                    for info in infos:
+                        cost += info['bill']
+                    print('Cost:', cost, '$')
+                    for idx, t in enumerate(time_list):
+                        print('Stage', idx, 'time:', t)
+                        print(times_list[idx])
+                        tt = np.array(times_list[idx])
+                        tt = tt.T[:4]
+                        tt[1] = tt[3] - tt[0] - tt[2]  # Add potential multi-thread overhead to compute
+                        avg_tt = np.mean(tt, axis=1)
+                        max_tt = np.percentile(tt, 95, axis=1)
+                        cold_tt_avg = t - avg_tt[3]
+                        cold_tt_max = t - np.sum(max_tt[:3])
+                        print('Avg:', avg_tt)
+                        print('Max:', max_tt)
+                        print('Cold:', cold_tt_avg, cold_tt_max)
+                        print('\n')
+                        stage_name = self.stages[idx].stage_name
+                        config_id = config_pairs.index(config_pair)
+                        res[stage_name]['cold'][epoch_id][config_id] = [cold_tt_avg, cold_tt_max]
+                        res[stage_name]['read'][epoch_id][config_id] = [avg_tt[0], max_tt[0]]
+                        res[stage_name]['compute'][epoch_id][config_id] = [avg_tt[1], max_tt[1]]
+                        res[stage_name]['write'][epoch_id][config_id] = [avg_tt[2], max_tt[2]]
+                    print('\n\n')
+                print('\n\n\n')
+
+            # Persist the results
+            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            prof_dir = os.path.join(prof_dir, 'profiles/')
+            if not os.path.exists(prof_dir):
+                os.mkdir(prof_dir)
+            prof_path = self.workflow_name + '_profile_analytic.json'
+            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+            prof_path = os.path.join(prof_dir, prof_path)
+            json.dump(res, open(prof_path, 'w'))
+            return prof_path
+        
         except Exception as e:
             print(res)
             print('\n\n')
@@ -371,8 +457,6 @@ class Workflow:
         t0 = time.time()
         assert isinstance(profile_path, str) and os.path.exists(profile_path)
         for stage in self.stages:
-            # if (self.stages.index(stage) != 1):
-            #     continue
             stage.perf_model.train(profile_path)
             
         if self.perf_model_type == PerfModel.Distribution.value:
@@ -512,6 +596,13 @@ class Workflow:
         assert isinstance(file_path, str) and file_path.endswith('.json')
         return json.load(open(file_path, 'r'))
     
+    def load_samples(self, file_path, num_samples):
+        assert isinstance(file_path, str) and file_path.endswith('.json') and \
+            isinstance(num_samples, int) and num_samples > 0
+        
+        samples = json.load(open(file_path, 'r'))
+        return samples[:num_samples]
+    
     '''
         Generate the python code for the objective function and constraints used by the solver
     Currently, we use the scipy.optimize as the solver and use numpy as the matrix library. 
@@ -632,7 +723,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'lazy' # 'step_by_step' 'lazy' 'perf_model'
+    test_mode = 'perf_model' # 'step_by_step' 'lazy' 'perf_model'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './tpcds-dsq95.json')
@@ -740,7 +831,7 @@ if __name__ == '__main__':
         wf.close_pools()
     elif test_mode == 'perf_model':
         # wf = Workflow('./tpcds-dsq95.json')
-        wf = Workflow('./ML-pipeline.json', 1)
+        wf = Workflow('./ML-pipeline.json', 0)
         # p = wf.profile(5)
         # print(p)
         p = '../profiles/ML-Pipeline_profile.json'
@@ -748,7 +839,7 @@ if __name__ == '__main__':
 
         param_path = wf.store_params()
         t0 = time.time()
-        sample_path = wf.sample_offline(3)
+        sample_path = wf.sample_offline(10000)
         t1 = time.time()
         print('Sample time:', t1-t0, 's\n\n')
 
@@ -761,7 +852,7 @@ if __name__ == '__main__':
         from funcs import objective_func, constraint_func
         if wf.secondary_path is not None:
             from funcs import constraint_func_2 
-        bound = 1000
+        bound = 35
         obj_params = wf.load_params(param_path)
         cons_params = wf.load_params(sample_path)
         solver = PCPSolver(2*len(wf.stages), objective_func, constraint_func, 

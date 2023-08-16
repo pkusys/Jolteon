@@ -34,9 +34,6 @@ def comp_func(x, a, b, c, d):
 
 '''
 StagePerfModel records the parameter distributions of a stage's performance model
-Advantage: it is more accurate for a single stage and needs less profiling samples to be trained
-Shortcoming: it ignores the partitioning reading overhead (k*d, d is the degree of parallelism
-of the stage's parent stage, the overhead is usually high for all-to-all shuffle)
 '''
 class StagePerfModel:
     def __init__(self, stage_id, stage_name, default_input_size=1024) -> None:
@@ -62,6 +59,7 @@ class StagePerfModel:
         self.parent_relavent = False  # only use for not allow parallel and related to parent stage
 
         # Reduce the dimension of the parameters from 8 to 5, excluding cold start
+        # By merging the parameters of read, compute, and write as follows:
         # allow_parallel: a/d + b/(kd) + c*log(x)/x + e/x**2 + f, x can be d or kd
         # not allow_parallel: a/k + b*d + c*log(k)/k + e/k**2 + f, 
         self.x_coeff = 0  # the coefficient of 1/d or 1/k in the stage, x can be d or kd

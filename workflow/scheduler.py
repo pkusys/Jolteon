@@ -8,7 +8,7 @@ import numpy as np
 
 from workflow import Workflow
 from perf_model_dist import eq_vcpu_alloc
-from utils import MyQueue
+from utils import MyQueue, PCPSolver
 
 # scheduler is responsible for tuning the launch time,
 # number of function invocation and resource configuration
@@ -16,6 +16,96 @@ from utils import MyQueue
 class Scheduler(ABC):
     def __init__(self, workflow: Workflow):
         self.workflow = workflow
+
+class Jolteon(Scheduler):
+    def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000):
+        super().__init__(workflow)
+        self.storage_mode = storage_mode
+        self.num_funcs = []
+        self.num_vcpus = []
+
+        self.bound_type = None
+        self.bound = None
+        self.risk = 0.05  # e.g., 5% risk for 95% latency <= bound
+        self.confidence_error = 0.001  # The confidence error for the bounded performance
+        self.max_sample_size = max_sample_size
+
+        self.solver = None
+
+    def set_bound(self, bound_type, bound, service_level):
+        # service_level is the probability that the latencty or cost is less than the bound
+        assert bound_type in ['latency', 'cost'] and bound > 0 and \
+            service_level > 0 and service_level < 1
+        self.bound_type = bound_type
+        self.bound = bound
+        self.risk = 1 - service_level
+
+    def set_confidence(self, confidence):
+        # confidence is the probability that the bounded performance is guaranteed
+        assert confidence > 0 and confidence < 1
+        self.confidence_error = 1 - confidence
+
+    def store_params_and_samples(self):
+        param_path = self.workflow.store_params()
+        sample_path = self.workflow.sample_offline(self.max_sample_size)
+        return param_path, sample_path
+
+    # Generate the objective and constraint functions code at './funcs.py'
+    def generate_func_code(self, func_path='./funcs.py'):
+        if func_path != './funcs.py' and func_path != 'funcs.py':
+            raise ValueError('The function path must be ./funcs.py')
+        self.workflow.generate_func_code(func_path, self.workflow.critical_path, 
+                                         self.workflow.secondary_path, 
+                                         cons_mode=self.bound_type)
+
+    def search_config(self, param_path, sample_path):
+        # Assume the functions have been generated
+        from funcs import objective_func, constraint_func
+        if self.workflow.secondary_path is not None:
+            from funcs import constraint_func_2 
+
+        t0 = time.time()
+        obj_params = self.workflow.load_params(param_path)
+        num_samples = PCPSolver.sample_size(len(self.workflow.stages), self.risk, 0, 
+                                            self.confidence_error)
+        cons_params = self.workflow.load_samples(sample_path, num_samples)
+        t1 = time.time()
+        print('Load time:', t1-t0, 's\n\n')
+
+        self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
+                                self.bound, obj_params, cons_params, 
+                                risk=self.risk, confidence_error=self.confidence_error)
+
+        res = self.solver.solve()
+
+        # print('Status:', res['status'])
+        # print('Objective:', res['obj_val'])
+        # print('Constraint:', res['cons_val'])
+        # print('Solution:', res['x'])
+
+        if not res['status']:
+            raise ValueError('Cannot find a feasible solution')
+        x = res['x']
+        for i, stage in enumerate(self.workflow.stages):
+            num_funcs = int(x[2*i]) + 1
+            if stage.allow_parallel is False:
+                num_funcs = 1
+            num_vcpus = x[2*i+1]
+            if num_vcpus < 1:
+                threshold = 1024 / 1792
+                if num_vcpus > threshold:
+                    num_vcpus = 1
+                else:
+                    num_vcpus = threshold
+            else:
+                num_vcpus = int(num_vcpus)
+            self.num_funcs.append(int(num_funcs))
+            self.num_vcpus.append(num_vcpus)
+
+    def set_config(self):
+        mem_list = [self.num_vcpus[i] * 1792 for i in range(len(self.num_vcpus))]
+        self.workflow.update_workflow_config(mem_list, self.num_funcs)
+
 
 class Caerus(Scheduler):
     def __init__(self, workflow: Workflow, storage_mode = 's3'):
@@ -50,6 +140,7 @@ class Caerus(Scheduler):
             stage.num_func = num_funcs[stage.stage_id]
         self.num_funcs = num_funcs
             
+
 class Orion(Caerus):
     def __init__(self, workflow: Workflow, storage_mode = 's3'):
         super().__init__(workflow)
@@ -129,6 +220,7 @@ class Ditto(Scheduler):
         self.sinks = []
         for stage in self.workflow.stages:
             param_a, _ = stage.perf_model.get_params()
+            param_a = abs(param_a)  # Fit for not allow_parallel stages, whose a is negative
             new_stage = self.Virtual_Stage(param_a, stage.stage_id)
             self.virtual_stages.append(new_stage)
             if stage in self.workflow.sources:
@@ -307,60 +399,79 @@ class Ditto(Scheduler):
         
         
     # Get the ratio of the entire workflow
-    def comp_ratio(self):
-        if len(self.sinks) != 1:
-            raise ValueError('Do not support the current virtual DAG in Ditto')
-        
-        sink_stage = self.sinks[0]
-        final_stage = None
-        
-        stop = True
-        while stop:
-            idx = None
-            dis_val = -1
-            leaves = sink_stage.reverse_deepest_stages()
-            for v_stage in leaves:
-                dis = Ditto.distance(v_stage, sink_stage)
-                if dis > dis_val:
-                    dis_val = dis
-                    idx = leaves.index(v_stage)
-            assert dis_val >= 0
-            cur_stage = leaves[idx]
+    def comp_ratio(self, obj = 'jct'):
+        if obj == 'jct':
+            if len(self.sinks) != 1:
+                raise ValueError('Do not support the current virtual DAG in Ditto')
             
-            if cur_stage == sink_stage:
-                stop = False
-                final_stage = cur_stage
-                break
+            sink_stage = self.sinks[0]
+            final_stage = None
             
-            assert len(cur_stage.children) <= 1
-            if len(cur_stage.children) == 0:
-                final_stage = cur_stage
-                break
-            
-            c_stage = cur_stage.children[0]
-            sib_stages = c_stage.parents
-            merge_stage = None
-            
-            # Merge sibling stages
-            for idx, s in enumerate(sib_stages):
-                if idx == 0:
-                    merge_stage = s
-                    continue
+            stop = True
+            while stop:
+                idx = None
+                dis_val = -1
+                leaves = sink_stage.reverse_deepest_stages()
+                for v_stage in leaves:
+                    dis = Ditto.distance(v_stage, sink_stage)
+                    if dis > dis_val:
+                        dis_val = dis
+                        idx = leaves.index(v_stage)
+                assert dis_val >= 0
+                cur_stage = leaves[idx]
                 
-                merge_stage = Ditto.merge(merge_stage, s, 1)
+                if cur_stage == sink_stage:
+                    stop = False
+                    final_stage = cur_stage
+                    break
+                
+                assert len(cur_stage.children) <= 1
+                if len(cur_stage.children) == 0:
+                    final_stage = cur_stage
+                    break
+                
+                c_stage = cur_stage.children[0]
+                sib_stages = c_stage.parents
+                merge_stage = None
+                
+                # Merge sibling stages
+                for idx, s in enumerate(sib_stages):
+                    if idx == 0:
+                        merge_stage = s
+                        continue
+                    
+                    merge_stage = Ditto.merge(merge_stage, s, 1)
+                
+                # Merge parent-child stage
+                merge_stage = Ditto.merge(merge_stage, c_stage, 0)
+                
+                if c_stage == sink_stage:
+                    sink_stage = merge_stage
+                
+                for c in c_stage.children:
+                    c.parents.remove(c_stage)
+                    c.parents.append(merge_stage)
+                    merge_stage.children.append(c)
             
-            # Merge parent-child stage
-            merge_stage = Ditto.merge(merge_stage, c_stage, 0)
-            
-            if c_stage == sink_stage:
-                sink_stage = merge_stage
-            
-            for c in c_stage.children:
-                c.parents.remove(c_stage)
-                c.parents.append(merge_stage)
-                merge_stage.children.append(c)
+            self.assign(final_stage, 1)
+        
+        elif obj == 'cost':
+            file_size = []
+            param_a_list = []
+            # Assume each function under Ditto has the same memory size
+            if self.storage_mode == 's3':
+                for stage in self.workflow.stages:
+                    param_a, _ = stage.perf_model.get_params()
+                    param_a = math.sqrt(abs(param_a))
+                    param_a_list.append(param_a)
+                    
+                sum_a = sum(param_a_list)
+                self.parallelism_ratio = [item / sum_a for item in param_a_list]
+            else:
+                raise NotImplementedError()
 
-        self.assign(final_stage, 1)
+        else:
+            raise ValueError('Invalid obj')
         
     def set_config(self, total_parallelism):
         pr = self.parallelism_ratio.copy()
@@ -376,14 +487,32 @@ class Ditto(Scheduler):
         
         
 if __name__ == '__main__':
-    # Test ditto
-    wf = Workflow('ML-pipeline.json', perf_model_type = 2)
+    # Test jolteon
+    wf = Workflow('ML-pipeline.json', perf_model_type = 0)
     wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
-    scheduler = Ditto(wf)
-    scheduler.comp_ratio()
-    scheduler.set_config(32)
-    print(scheduler.parallelism_ratio)
-    print(scheduler.num_funcs)
+
+    scheduler = Jolteon(wf)
+    scheduler.set_bound('latency', 40, 0.95)
+    t0 = time.time()
+    param_path, sample_path = scheduler.store_params_and_samples()
+    t1 = time.time()
+    print('Sample time:', t1-t0, 's\n\n')
+    scheduler.generate_func_code()
+    t0 = time.time()
+    scheduler.search_config(param_path, sample_path)
+    t1 = time.time()
+    print(PCPSolver.sample_size(len(wf.stages), scheduler.risk, 0, scheduler.confidence_error))
+    print('Search time:', t1-t0, 's\n\n')
+    # scheduler.set_config()
+
+    # Test ditto
+    # wf = Workflow('ML-pipeline.json', perf_model_type = 2)
+    # wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
+    # scheduler = Ditto(wf)
+    # scheduler.comp_ratio()
+    # scheduler.set_config(32)
+    # print(scheduler.parallelism_ratio)
+    # print(scheduler.num_funcs)
     
     # Test orion
     # wf = Workflow('ML-pipeline.json', perf_model_type = 1)
@@ -429,3 +558,5 @@ if __name__ == '__main__':
     # print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
     #         + time_list[4] + time_list[6] + time_list[7])
     # print('\n\n')
+
+    wf.close_pools()
