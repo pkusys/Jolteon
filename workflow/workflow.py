@@ -184,12 +184,16 @@ class Workflow:
         raise NotImplementedError
     
     def profile(self, num_epochs = 3) -> str:
-        if self.perf_model_type == PerfModel.Jolteon.value:
+        # if self.perf_model_type == PerfModel.Jolteon.value:
+        #     return self.profile_jolteon(num_epochs)
+        # elif self.perf_model_type == PerfModel.Distribution.value:
+        #     return self.profile_dist(num_epochs)
+        # elif self.perf_model_type == PerfModel.Analytical.value:
+        #     return self.profile_analytic(num_epochs)
+        # else:
+        #     raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
+        if self.perf_model_type in [PerfModel.Jolteon.value, PerfModel.Distribution.value, PerfModel.Analytical.value]:
             return self.profile_jolteon(num_epochs)
-        elif self.perf_model_type == PerfModel.Distribution.value:
-            return self.profile_dist(num_epochs)
-        elif self.perf_model_type == PerfModel.Analytical.value:
-            return self.profile_analytic(num_epochs)
         else:
             raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
         
@@ -442,7 +446,7 @@ class Workflow:
             prof_dir = os.path.join(prof_dir, 'profiles/')
             if not os.path.exists(prof_dir):
                 os.mkdir(prof_dir)
-            prof_path = self.workflow_name + '_profile_jolteon.json'
+            prof_path = self.workflow_name + '_profile.json'
             prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
             prof_path = os.path.join(prof_dir, prof_path)
             json.dump(res, open(prof_path, 'w'))
@@ -546,17 +550,6 @@ class Workflow:
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
         res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
-
-        # # Prune the samples
-        # is_greater_than_others = np.ones(res.shape[0], dtype=bool)
-        # # is_less_than_another = np.zeros(res.shape[0], dtype=bool)
-        # for i in range(res.shape[0]):
-        #     is_greater_than_others[i] = np.all(np.all(res[i] > res[np.arange(res.shape[0]) != i], axis=1))
-        #     # is_less_than_another[i] = np.any(np.all(res[i] < res[np.arange(res.shape[0]) != i], axis=1))
-        # vecs = res[is_greater_than_others]
-        # # vecs = vecs[is_less_than_another]
-        # print(vecs.shape[0])
-        
         res = res.tolist()
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
@@ -567,6 +560,17 @@ class Workflow:
         sample_path = os.path.join(sample_dir, sample_path)
         json.dump(res, open(sample_path, 'w'))
         return sample_path
+
+    def prune_samples(self, samples):
+        # is_greater_than_others = np.ones(samples.shape[0], dtype=bool)
+        is_less_than_another = np.zeros(samples.shape[0], dtype=bool)
+        for i in range(samples.shape[0]):
+            # is_greater_than_others[i] = np.all(np.all(samples[i] > samples[np.arange(res.shape[0]) != i], axis=1))
+            is_less_than_another[i] = np.any(np.all(samples[i] < samples[np.arange(res.shape[0]) != i], axis=1))
+        # res = samples[is_greater_than_others]
+        res = samples[is_less_than_another]
+        # print(res.shape[0])
+        return res
     
     def update_workflow_config(self, mem_list, parall_list):
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
@@ -603,6 +607,12 @@ class Workflow:
         meta_dir = os.path.join(meta_dir, meta_type + '/')
         if meta_type == 'profiles':
             meta_type = 'profile'
+            # if self.perf_model_type == PerfModel.Distribution.value:
+            #     meta_type = 'profile_dist'
+            # elif self.perf_model_type == PerfModel.Analytical.value:
+            #     meta_type = 'profile_analytic'
+            # elif self.perf_model_type == PerfModel.Jolteon.value:
+            #     meta_type = 'profile_jolteon'
         meta_path = self.workflow_name + '_' + meta_type + '.json'
         meta_path = meta_path.replace('/', '-')
         meta_path = os.path.join(meta_dir, meta_path)
@@ -622,7 +632,7 @@ class Workflow:
         assert isinstance(critical_path, list) 
         assert secondary_path is None or isinstance(secondary_path, list)
         assert cons_mode in ['latency', 'cost']
-        assert solver_type in ['scipy', 'pyomo']
+        assert solver_type == 'scipy'
         code_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(code_dir, file_name)
         obj_mode = 'cost' if cons_mode == 'latency' else 'latency'

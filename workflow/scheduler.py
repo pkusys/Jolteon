@@ -9,7 +9,7 @@ import numpy as np
 
 from workflow import Workflow
 from perf_model_dist import eq_vcpu_alloc
-from utils import MyQueue, PCPSolver
+from utils import MyQueue, PCPSolver, extract_info_from_log, clear_data
 
 # scheduler is responsible for tuning the launch time,
 # number of function invocation and resource configuration
@@ -530,7 +530,6 @@ def main():
         if args.scheduler == 'jolteon':
             scheduler = Jolteon(wf)
             scheduler.store_params_and_samples()
-            scheduler.generate_func_code()
     else:
         if args.scheduler != 'jolteon' and args.scheduler != 'caerus':
             wf.train_perf_model(wf.metadata_path('profiles'))
@@ -538,8 +537,12 @@ def main():
             scheduler = Jolteon(wf)
             scheduler.set_bound(args.bound_type, args.bound_value, args.service_level)
             scheduler.set_confidence(args.confidence)
+            scheduler.generate_func_code()
+
             param_path = wf.metadata_path('params')
+            print(param_path)
             sample_path = wf.metadata_path('samples')
+            print(sample_path)
             scheduler.search_config(param_path, sample_path)
             scheduler.set_config()
         elif args.scheduler == 'orion':
@@ -555,7 +558,40 @@ def main():
             scheduler.comp_ratio()
             scheduler.set_config(32)
         
-        wf.lazy_execute()
+        wf.init_stage_status()
+        clear_dir = wf.workflow_name + '/stage'
+        clear_dir = clear_dir.replace('-', '_')
+        clear_data(clear_dir)
+        t0 = time.time()
+        res = wf.lazy_execute()
+        t1 = time.time()
+        print('Time:', t1 - t0)
+        print(res)
+        infos = []
+        time_list = []
+        times_list = []
+        for ids, r in enumerate(res):
+            l = []
+            for ids_, result in enumerate(r):
+                if ids_ == 0:
+                    time_list.append(result)
+                    continue
+                info = extract_info_from_log(result[1])
+                infos.append(info)
+                
+                rd = json.loads(result[0])
+                if 'statusCode' not in rd:
+                    print(rd)
+                rd = json.loads(rd['body'])
+                l.append(rd['breakdown'])
+            times_list.append(l)
+        cost = 0
+        for info in infos:
+            cost += info['bill']
+        print('Cost:', cost, '$')
+        for idx, t in enumerate(time_list):
+            print('Stage', idx, 'time:', t)
+            print(times_list[idx])
         wf.close_pools()
 
 
