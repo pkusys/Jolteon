@@ -4,6 +4,7 @@ import utils
 import time
 import json
 import math
+import argparse
 import numpy as np
 
 from workflow import Workflow
@@ -399,8 +400,8 @@ class Ditto(Scheduler):
         
         
     # Get the ratio of the entire workflow
-    def comp_ratio(self, obj = 'jct'):
-        if obj == 'jct':
+    def comp_ratio(self, obj = 'latency'):
+        if obj == 'latency':
             if len(self.sinks) != 1:
                 raise ValueError('Do not support the current virtual DAG in Ditto')
             
@@ -485,24 +486,98 @@ class Ditto(Scheduler):
             stage.num_func = num_funcs[stage.stage_id]
         self.num_funcs = num_funcs
         
-        
-if __name__ == '__main__':
-    # Test jolteon
-    wf = Workflow('ML-pipeline.json', perf_model_type = 0)
-    wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
 
-    scheduler = Jolteon(wf)
-    scheduler.set_bound('latency', 40, 0.95)
-    t0 = time.time()
-    param_path, sample_path = scheduler.store_params_and_samples()
-    t1 = time.time()
-    print('Sample time:', t1-t0, 's\n\n')
-    scheduler.generate_func_code()
-    t0 = time.time()
-    scheduler.search_config(param_path, sample_path)
-    t1 = time.time()
-    print(PCPSolver.sample_size(len(wf.stages), scheduler.risk, 0, scheduler.confidence_error))
-    print('Search time:', t1-t0, 's\n\n')
+def main():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('-w', '--workflow', type=str, required=True, help='workfloe name abbreviation, e.g., ml, tpcds, video')
+    parser.add_argument('-s', '--scheduler', type=str, default='jolteon', help='scheduler name, e.g., jolteon, ditto, orion, caerus')
+    parser.add_argument('-bt', '--bound_type', type=str, default='latency', help='bound type, e.g., latency, cost, also used as obj type for ditto')
+    parser.add_argument('-bv', '--bound_value', type=float, default=40, help='bound value')
+    parser.add_argument('-l', '--service_level', type=float, default=0.95, help='service level')
+    parser.add_argument('-c', '--confidence', type=float, default=0.999, help='confidence')
+    parser.add_argument('-p', '--profile', type=int, default=0, help='profile or not, 0 or 1')
+    parser.add_argument('-t', '--train', type=int, default=0, help='train or not, 0 or 1')
+
+    args = parser.parse_args()
+
+    workflow_file = ''
+    if args.workflow == 'ml':
+        workflow_file = 'ML-pipeline.json'
+    elif args.workflow == 'tpcds':
+        workflow_file = 'tpcds-dsq95.json'
+    elif args.workflow == 'video':
+        workflow_file = 'Video-analytics.json'
+    else:
+        raise ValueError('Invalid workflow')
+    
+    perf_model_type = -1
+    if args.scheduler == 'jolteon':
+        perf_model_type = 0
+    elif args.scheduler == 'orion':
+        perf_model_type = 1
+    elif args.scheduler == 'ditto' or args.scheduler == 'caerus':
+        perf_model_type = 2
+    else:
+        raise ValueError('Invalid scheduler')
+
+    wf = Workflow(workflow_file, perf_model_type = perf_model_type)
+
+    if args.profile == 1:
+        wf.profile()
+    elif args.train == 1:
+        wf.train_perf_model(wf.metadata_path('profiles'))
+        if args.scheduler == 'jolteon':
+            scheduler = Jolteon(wf)
+            scheduler.store_params_and_samples()
+            scheduler.generate_func_code()
+    else:
+        if args.scheduler != 'jolteon' and args.scheduler != 'caerus':
+            wf.train_perf_model(wf.metadata_path('profiles'))
+        if args.scheduler == 'jolteon':
+            scheduler = Jolteon(wf)
+            scheduler.set_bound(args.bound_type, args.bound_value, args.service_level)
+            scheduler.set_confidence(args.confidence)
+            param_path = wf.metadata_path('params')
+            sample_path = wf.metadata_path('samples')
+            scheduler.search_config(param_path, sample_path)
+            scheduler.set_config()
+        elif args.scheduler == 'orion':
+            scheduler = Orion(wf)
+            scheduler.comp_ratio()
+            scheduler.set_config(32, 25, 0.9)
+        elif args.scheduler == 'ditto':
+            scheduler = Ditto(wf)
+            scheduler.comp_ratio(args.bound_type)
+            scheduler.set_config(32)
+        elif args.scheduler == 'caerus':
+            scheduler = Caerus(wf)
+            scheduler.comp_ratio()
+            scheduler.set_config(32)
+        
+        wf.lazy_execute()
+        wf.close_pools()
+
+
+if __name__ == '__main__':
+    main()
+
+    # Test jolteon
+    # wf = Workflow('ML-pipeline.json', perf_model_type = 0)
+    # wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
+
+    # scheduler = Jolteon(wf)
+    # scheduler.set_bound('latency', 40, 0.95)
+    # t0 = time.time()
+    # param_path, sample_path = scheduler.store_params_and_samples()
+    # t1 = time.time()
+    # print('Sample time:', t1-t0, 's\n\n')
+    # scheduler.generate_func_code()
+    # t0 = time.time()
+    # scheduler.search_config(param_path, sample_path)
+    # t1 = time.time()
+    # print(PCPSolver.sample_size(len(wf.stages), scheduler.risk, 0, scheduler.confidence_error))
+    # print('Search time:', t1-t0, 's\n\n')
     # scheduler.set_config()
 
     # Test ditto
@@ -520,7 +595,6 @@ if __name__ == '__main__':
     # scheduler = Orion(wf)
     # scheduler.comp_ratio()
     # scheduler.set_config(32, 25, 0.9)
-    # wf.close_pools()
     
     # Test caerus
     # for stage in wf.stages:
@@ -559,4 +633,4 @@ if __name__ == '__main__':
     #         + time_list[4] + time_list[6] + time_list[7])
     # print('\n\n')
 
-    wf.close_pools()
+    # wf.close_pools()

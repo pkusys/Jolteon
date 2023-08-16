@@ -183,7 +183,7 @@ class Workflow:
     def eager_execute(self):
         raise NotImplementedError
     
-    def profile(self, num_epochs = 2) -> str:
+    def profile(self, num_epochs = 3) -> str:
         if self.perf_model_type == PerfModel.Jolteon.value:
             return self.profile_jolteon(num_epochs)
         elif self.perf_model_type == PerfModel.Distribution.value:
@@ -567,12 +567,6 @@ class Workflow:
         sample_path = os.path.join(sample_dir, sample_path)
         json.dump(res, open(sample_path, 'w'))
         return sample_path
-
-    def fuse_samples_online(self, sample_path, num_fused_samples):
-        assert isinstance(sample_path, str) and sample_path.endswith('.json')
-        assert isinstance(num_fused_samples, int) and num_fused_samples > 0
-        # TODO: fuse like k-means
-        pass
     
     def update_workflow_config(self, mem_list, parall_list):
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
@@ -602,6 +596,19 @@ class Workflow:
         
         samples = json.load(open(file_path, 'r'))
         return samples[:num_samples]
+
+    def metadata_path(self, meta_type):
+        assert meta_type in ['profiles', 'params', 'samples']
+        meta_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        meta_dir = os.path.join(meta_dir, meta_type + '/')
+        if meta_type == 'profiles':
+            meta_type = 'profile'
+        meta_path = self.workflow_name + '_' + meta_type + '.json'
+        meta_path = meta_path.replace('/', '-')
+        meta_path = os.path.join(meta_dir, meta_path)
+        if not os.path.exists(meta_path):
+            raise Exception('Path does not exist')
+        return meta_path
     
     '''
         Generate the python code for the objective function and constraints used by the solver
