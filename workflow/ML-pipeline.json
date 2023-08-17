@@ -17,7 +17,7 @@
         "input_files": ["ML_Pipeline/stage0/train_pca_transform.txt"],
         "output_files": ["ML_Pipeline/stage1/model"],
         "read_pattern": ["read"],
-        "extra_args": {"total_trees" : 8}
+        "extra_args": {"total_trees" : 64}
     },
     "2": {
         "stage_name": "stage2",

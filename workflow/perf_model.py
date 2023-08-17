@@ -43,6 +43,7 @@ class StagePerfModel:
         self.stage_id = stage_id
 
         self.allow_parallel = True
+        self.has_parent = False
 
         assert isinstance(default_input_size, int) and default_input_size > 0
         self.default_input_size = default_input_size  # MB
@@ -71,6 +72,10 @@ class StagePerfModel:
     def update_allow_parallel(self, allow_parallel) -> None:
         assert isinstance(allow_parallel, bool)
         self.allow_parallel = allow_parallel
+    
+    def update_has_parent(self, has_parent) -> None:
+        assert isinstance(has_parent, bool)
+        self.has_parent = has_parent
 
     def train(self, profile_path) -> None:
         assert isinstance(profile_path, str) and profile_path.endswith('.json')
@@ -83,7 +88,7 @@ class StagePerfModel:
             'read' in stage_profile and 'compute' in stage_profile and \
             'write' in stage_profile
 
-        print('Training performance model for %s' % self.stage_name)
+        # print('Training performance model for %s' % self.stage_name)
 
         # For scheduling delay and cold start, just a random variable
         y_s = np.array(stage_profile['cold'])
@@ -104,7 +109,6 @@ class StagePerfModel:
 
             # Use non-linear least squares to fit the parameters for average time
             # Read
-            print('Read')
             popt1, pcov1 = scipy_opt.curve_fit(io_func, d, y_r)
             y_ = io_func(d, popt1[0], popt1[1])
             err1 = (y_ - y_r) / y_r
@@ -124,21 +128,20 @@ class StagePerfModel:
                 self.can_intra_parallel[0] = True
                 self.read_params_avg = popt2
                 self.read_cov_avg = pcov2
-            print('d error avg:', err1)
-            print('kd error avg:', err2)
-            print('d abs mean error:', s_err1)
-            print('kd abs mean error:', s_err2)
-            print('d mean error:', m_err1)
-            print('kd mean error:', m_err2)
-            print('--------------------------------')
+            # print('Read')
+            # print('d error avg:', err1)
+            # print('kd error avg:', err2)
+            # print('d abs mean error:', s_err1)
+            # print('kd abs mean error:', s_err2)
+            # print('d mean error:', m_err1)
+            # print('kd mean error:', m_err2)
+            # print('--------------------------------')
 
             # Compute
-            print('Compute')
             popt1, pcov1 = scipy_opt.curve_fit(comp_func, d, y_c)
             y_ = comp_func(d, popt1[0], popt1[1], popt1[2], popt1[3])
             err1 = (y_ - y_c) / y_c
             popt2, pcov2 = scipy_opt.curve_fit(comp_func, kd, y_c)
-            print('comp params', popt2)
             y_ = comp_func(kd, popt2[0], popt2[1], popt2[2], popt2[3])
             err2 = (y_ - y_c) / y_c
             # Choose the better one
@@ -146,7 +149,7 @@ class StagePerfModel:
             s_err2 = np.mean(np.abs(err2))
             m_err1 = np.mean(err1)
             m_err2 = np.mean(err2)
-            if s_err1 < s_err2:
+            if s_err1 < s_err2 and abs(m_err1) < abs(m_err2):
                 self.can_intra_parallel[1] = False
                 self.compute_params_avg = popt1
                 self.compute_cov_avg = pcov1
@@ -154,16 +157,16 @@ class StagePerfModel:
                 self.can_intra_parallel[1] = True
                 self.compute_params_avg = popt2
                 self.compute_cov_avg = pcov2
-            print('d error avg:', err1)
-            print('kd error avg:', err2)
-            print('d abs mean error:', s_err1)
-            print('kd abs mean error:', s_err2)
-            print('d mean error:', m_err1)
-            print('kd mean error:', m_err2)
-            print('--------------------------------')
+            # print('Compute')
+            # print('d error avg:', err1)
+            # print('kd error avg:', err2)
+            # print('d abs mean error:', s_err1)
+            # print('kd abs mean error:', s_err2)
+            # print('d mean error:', m_err1)
+            # print('kd mean error:', m_err2)
+            # print('--------------------------------')
             
             # Write
-            print('Write')
             popt1, pcov1 = scipy_opt.curve_fit(io_func, d, y_w)
             y_ = io_func(d, popt1[0], popt1[1])
             err1 = (y_ - y_w) / y_w
@@ -183,15 +186,16 @@ class StagePerfModel:
                 self.can_intra_parallel[2] = True
                 self.write_params_avg = popt2
                 self.write_cov_avg = pcov2
-            print('d error avg:', err1)
-            print('kd error avg:', err2)
-            print('d abs mean error:', s_err1)
-            print('kd abs mean error:', s_err2)
-            print('d mean error:', m_err1)
-            print('kd mean error:', m_err2)
-            print('--------------------------------')
-            print('Intra parallel:', self.can_intra_parallel)
-            print('--------------------------------')
+            # print('Write')
+            # print('d error avg:', err1)
+            # print('kd error avg:', err2)
+            # print('d abs mean error:', s_err1)
+            # print('kd abs mean error:', s_err2)
+            # print('d mean error:', m_err1)
+            # print('kd mean error:', m_err2)
+            # print('--------------------------------')
+            # print('Intra parallel:', self.can_intra_parallel)
+            # print('--------------------------------')
 
             # Compute the coefficients
             if self.can_intra_parallel[0]:
@@ -233,7 +237,6 @@ class StagePerfModel:
 
             # Use non-linear least squares to fit the parameters for average time
             # Read
-            print('Read')
             popt1, pcov1 = scipy_opt.curve_fit(io_func, k, y_r)
             y_ = io_func(k, popt1[0], popt1[1])
             err1 = (y_ - y_r) / y_r
@@ -245,7 +248,7 @@ class StagePerfModel:
             s_err2 = np.mean(np.abs(err2))
             m_err1 = np.mean(err1)
             m_err2 = np.mean(err2)
-            if s_err1 < s_err2:
+            if s_err1 < s_err2 or self.has_parent == False:
                 self.parent_relavent = False
                 self.read_params_avg = popt1
                 self.read_cov_avg = pcov1
@@ -253,33 +256,32 @@ class StagePerfModel:
                 self.parent_relavent = True
                 self.read_params_avg = popt2
                 self.read_cov_avg = pcov2
-            print('k error avg:', err1)
-            print('k_d error avg:', err2)
-            print('k abs mean error:', s_err1)
-            print('k_d abs mean error:', s_err2)
-            print('k mean error:', m_err1)
-            print('k_d mean error:', m_err2)
-            print('--------------------------------')
-            print('Parent relavent:', self.parent_relavent)
-            print('--------------------------------')
+            # print('Read')
+            # print('k error avg:', err1)
+            # print('k_d error avg:', err2)
+            # print('k abs mean error:', s_err1)
+            # print('k_d abs mean error:', s_err2)
+            # print('k mean error:', m_err1)
+            # print('k_d mean error:', m_err2)
+            # print('--------------------------------')
+            # print('Parent relavent:', self.parent_relavent)
+            # print('--------------------------------')
 
             # Compute, directly use k to fit
-            print('Compute')
             popt1, pcov1 = scipy_opt.curve_fit(comp_func, k, y_c)
-            print('comp params', popt2)
             y_ = comp_func(k, popt1[0], popt1[1], popt1[2], popt1[3])
             err1 = (y_ - y_c) / y_c
             s_err1 = np.mean(np.abs(err1))  # abs mean error
             m_err1 = np.mean(err1)
             self.compute_params_avg = popt1
             self.compute_cov_avg = pcov1
-            print('k error avg:', err1)
-            print('k abs mean error:', s_err1)
-            print('k mean error:', m_err1)
-            print('--------------------------------')
+            # print('Compute')
+            # print('k error avg:', err1)
+            # print('k abs mean error:', s_err1)
+            # print('k mean error:', m_err1)
+            # print('--------------------------------')
 
             # Write, directly use k to fit
-            print('Write')
             popt1, pcov1 = scipy_opt.curve_fit(io_func, k, y_w)
             y_ = io_func(k, popt1[0], popt1[1])
             if y_w[0] > 1e-6:  # Avoid divide by zero, typically happens at the last stage's write
@@ -292,10 +294,11 @@ class StagePerfModel:
                 m_err1 = 0
             self.write_params_avg = popt1
             self.write_cov_avg = pcov1
-            print('k error avg:', err1)
-            print('k abs mean error:', s_err1)
-            print('k mean error:', m_err1)
-            print('--------------------------------')
+            # print('Write')
+            # print('k error avg:', err1)
+            # print('k abs mean error:', s_err1)
+            # print('k mean error:', m_err1)
+            # print('--------------------------------')
 
             # Compute the coefficients
             self.x_coeff += self.read_params_avg[0] + self.compute_params_avg[0] + \
@@ -320,10 +323,9 @@ class StagePerfModel:
             print('Stage abs mean error:', s_err)
             print('Stage mean error:', m_err)
         
-        print('Training finished')
         print('\n\n')
 
-    # private method, for test
+    # private method
     def __visualize(self, profile_path) -> None:
         assert isinstance(profile_path, str) and profile_path.endswith('.json')
         profile = None
@@ -351,12 +353,6 @@ class StagePerfModel:
         popt1, pcov1 = scipy_opt.curve_fit(io_func, kd, y_r)
         popt2, pcov2 = scipy_opt.curve_fit(comp_func, d, y_c)
         popt3, pcov3 = scipy_opt.curve_fit(io_func, kd, y_w)
-        sigma1 = np.sqrt(np.diag(pcov1))
-        sigma2 = np.sqrt(np.diag(pcov2))
-        sigma3 = np.sqrt(np.diag(pcov3))
-        print('Read:', popt1, sigma1)
-        print('Compute:', popt2, sigma2)
-        print('Write:', popt3, sigma3)
 
         num_samples = 2000
 
@@ -366,50 +362,28 @@ class StagePerfModel:
         y_1_l = []
         y_2_l = []
         y_3_l = []
-        ps1_max = np.max(ps1, axis=0)
-        ps1_min = np.min(ps1, axis=0)
-        ps2_max = np.max(ps2, axis=0)
-        ps2_min = np.min(ps2, axis=0)
-        ps3_max = np.max(ps3, axis=0)
-        ps3_min = np.min(ps3, axis=0)
 
         x = np.linspace(0.9, 32, 100)
 
         f = 0.1
 
         y_1 = io_func(x, popt1[0], popt1[1])
-        y_1_max = io_func(x, popt1[0]+f*sigma1[0], popt1[1]+f*sigma1[1])
-        y_1_min = io_func(x, popt1[0]-f*sigma1[0], popt1[1]-f*sigma1[1])
         for i in range(num_samples):
             y_1_l.append(io_func(x, ps1[i][0], ps1[i][1]))
         y_1_l = np.array(y_1_l)
-        y_1_l_max = io_func(x, ps1_max[0], ps1_max[1])
-        y_1_l_min = io_func(x, ps1_min[0], ps1_min[1])
         
         y_2 = comp_func(x, popt2[0], popt2[1], popt2[2], popt2[3])
-        y_2_max = comp_func(x, popt2[0]+f*sigma2[0], popt2[1]+f*sigma2[1], popt2[2]+f*sigma2[2], popt2[3]+f*sigma2[3])
-        y_2_min = comp_func(x, popt2[0]-f*sigma2[0], popt2[1]-f*sigma2[1], popt2[2]-f*sigma2[2], popt2[3]-f*sigma2[3])
         for i in range(num_samples):
             y_2_l.append(comp_func(x, ps2[i][0], ps2[i][1], ps2[i][2], ps2[i][3]))
         y_2_l = np.array(y_2_l)
-        y_2_l_max = comp_func(x, ps2_max[0], ps2_max[1], ps2_max[2], ps2_max[3])
-        y_2_l_min = comp_func(x, ps2_min[0], ps2_min[1], ps2_min[2], ps2_min[3])
         
         y_3 = io_func(x, popt3[0], popt3[1])
-        y_3_max = io_func(x, popt3[0]+f*sigma3[0], popt3[1]+f*sigma3[1])
-        y_3_min = io_func(x, popt3[0]-f*sigma3[0], popt3[1]-f*sigma3[1])
         for i in range(num_samples):
             y_3_l.append(io_func(x, ps3[i][0], ps3[i][1]))
         y_3_l = np.array(y_3_l)
-        y_3_l_max = io_func(x, ps3_max[0], ps3_max[1])
-        y_3_l_min = io_func(x, ps3_min[0], ps3_min[1])
         
         y_p = y_1 + y_2 + y_3 + np.mean(y_s, axis=0)
-        y_p_max = y_1_max + y_2_max + y_3_max + np.mean(y_s, axis=0)
-        y_p_min = y_1_min + y_2_min + y_3_min + np.mean(y_s, axis=0)
         y_l = y_1_l + y_2_l + y_3_l + np.mean(y_s, axis=0)
-        y_l_max = y_1_l_max + y_2_l_max + y_3_l_max + np.mean(y_s, axis=0)
-        y_l_min = y_1_l_min + y_2_l_min + y_3_l_min + np.mean(y_s, axis=0)
 
         y_1_d = io_func(kd, popt1[0], popt1[1])
         y_2_d = comp_func(d, popt2[0], popt2[1], popt2[2], popt2[3])
@@ -433,15 +407,10 @@ class StagePerfModel:
             axes.set_ylabel('Error (%)')
         else:
             s = axes.scatter(kd, y_, zorder=3, label='samples')
-            # axes.scatter(kd, y_d)
             l0, = axes.plot(x, y_p, 'r', label='pred_mean')
             for i in range(num_samples):
                 l1, = axes.plot(x, y_l[i], 'darkorange', label='pred w/ cov', alpha=0.1, zorder=1)
-            l2, = axes.plot(x, y_l_max, 'royalblue', label='pred_max', zorder=2)
             fig.legend(handles=[s, l0, l1], ncol=3, loc='upper center', bbox_to_anchor=(0.5, 1.0), fontsize=font_size)
-            # plt.plot(x, y_p_max, 'royalblue')
-            # plt.plot(x, y_p_min, 'royalblue')
-            # plt.scatter(kd, y_s)
             axes.set_ylabel('Time (s)')
         axes.set_xlabel('k*d (eq vCPU)')
         plt.savefig('tmp.png')
@@ -449,43 +418,38 @@ class StagePerfModel:
     def visualize(self, profile_path) -> None:
         self.__visualize(profile_path)
 
-    def predict(self, mem, num_func, mode='latency', parent_d=None, input_size=None) -> float:
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0) -> float:
         # input_size uses MB as unit
-        assert (isinstance(mem, int) or isinstance(mem, float)) and mem >= 128 and mem <= 10240
-        assert isinstance(num_func, int) and num_func > 0
+        assert num_vcpu > 0 and num_vcpu <= 10
+        assert num_func > 0
         assert mode in ['latency', 'cost']
-        if input_size is not None:
-            assert (isinstance(input_size, int) or isinstance(input_size, float)) and input_size > 0
-        if parent_d is not None:
-            assert isinstance(parent_d, int) and parent_d > 0
 
-        x = [num_func, num_func, num_func]
+        k = eq_vcpu_alloc(num_vcpu*1792, 1)
+        kd = eq_vcpu_alloc(num_vcpu*1792, num_func)
+        d = num_func
+        x = [1.0/d, 1.0/kd, np.log(d)/d, 1.0/d**2, 1.0]
         if self.allow_parallel:
-            for i in range(3):
-                if self.can_intra_parallel[i]:
-                    x[i] = eq_vcpu_alloc(mem, num_func)
+            if self.can_intra_parallel[1]:
+                x[2] = np.log(kd)/kd
+                x[3] = 1.0/kd**2
         else:
-            for i in range(3):
-                x[i] = eq_vcpu_alloc(mem, 1)
-            if self.parent_relavent:
-                x[0] = x[0] / parent_d
-        pred = 0
-
-        # For scheduling delay and cold start, just a random sample
-        pred += io_func(x[0], self.read_params_avg[0], self.read_params_avg[1])
-        pred += np.mean(comp_func(x[1], self.compute_params_avg[0], self.compute_params_avg[1], 
-                        self.compute_params_avg[2], self.compute_params_avg[3]))
-        pred += np.mean(io_func(x[2], self.write_params_avg[0], self.write_params_avg[1]))
-        if input_size is not None:
-            pred *= input_size / self.default_input_size
+            x = [1.0/k, parent_d, np.log(k)/k, 1.0/k**2, 1.0]
+            if not self.parent_relavent:
+                x[1] = 0
+        
+        params = self.params()
+        pred = np.dot(params[1:], x)
         if mode == 'latency':
-            pred += np.random.choice(self.cold_params_avg)
+            pred += params[0]
             return pred
         else:
-            return pred * num_func * mem / 1024 * 0.0000000167 * 1000 + 0.2 * num_func / 1000000
+            # 1792 / 1024 * 0.0000000167 * 1000
+            pred += params[0]
+            return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
 
-    def params(self) -> dict:
-        res = np.array([np.mean(self.cold_params_avg), self.x_coeff, self.kd_d_coeff, self.logx_coeff,
+    def params(self):
+        cold_coeff = np.percentile(self.cold_params_avg, 70)
+        res = np.array([cold_coeff, self.x_coeff, self.kd_d_coeff, self.logx_coeff,
                         self.x2_coeff, self.const_coeff])
         return res
 
@@ -493,7 +457,8 @@ class StagePerfModel:
         assert isinstance(num_samples, int) and num_samples > 0
         # Sample for num_samples times
         res = {'cold': [], 'read': [], 'compute': [], 'write': []}
-        seed_val = int(time.time())
+        # seed_val = int(time.time())
+        seed_val = 31729  # Great magic number!
         rng = np.random.default_rng(seed=seed_val)
         res['cold'] = rng.choice(self.cold_params_avg, num_samples)
         res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
@@ -539,7 +504,7 @@ class StagePerfModel:
         assert isinstance(parent_id, int)
         assert mode in ['latency', 'cost']
         assert isinstance(var, str) and isinstance(param, str)
-        assert solver_type in ['scipy', 'pyomo']
+        assert solver_type == 'scipy'
 
         # 6 param indices and 2 var indices for each stage
         # 0: cold, 1: x, 2: kd/d, 3: log(x)/x, 4: 1/x**2, 5: const
@@ -565,7 +530,7 @@ class StagePerfModel:
             var_x = var_d
         var_x = '(' + var_x + ')'
 
-        log_method = 'np.log' if solver_type == 'scipy' else 'pyo.log'
+        log_method = 'np.log'
 
         if self.allow_parallel:
             s += x_param + '/' + var_d + ' + '
@@ -587,6 +552,7 @@ class StagePerfModel:
             # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225 
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
+            s = cold_param + ' + ' + s
             s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
         return s
 
@@ -599,12 +565,3 @@ class StagePerfModel:
     
     def __del__(self):
         pass
-
-
-if __name__ == '__main__':
-    m = StagePerfModel(3, 'stage3')
-    m.allow_parallel = False
-    # m.visualize('../profiles/ML-Pipeline_profile.json')
-    m.train('../profiles/ML-Pipeline_profile.json')
-    print(m.params())
-    print(m.sample_offline(3))

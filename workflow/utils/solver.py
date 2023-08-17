@@ -89,12 +89,18 @@ class PCPSolver:
                 elif isinstance(init_vals, np.ndarray) and init_vals.shape == (self.num_X, ):
                     x0 = init_vals
 
-            X_bounds = [(0.75, None) for _ in range(self.num_X)] # optional bounds for each x
+            X_bounds = [(0.5, None) for _ in range(self.num_X)] # optional bounds for each x
             if x_bound is not None:
                 if isinstance(x_bound, tuple) and len(x_bound) ==2:
                     X_bounds = [x_bound for _ in range(self.num_X)]
                 elif isinstance(x_bound, list) and len(x_bound) == self.num_X:
                     X_bounds = x_bound
+                elif isinstance(x_bound, list) and len(x_bound) == 2:
+                    # [0] is for parallelism, [1] is for intra-function resource
+                    X_bounds = []
+                    for _ in range(self.num_X // 2):
+                        X_bounds.append(x_bound[0])
+                        X_bounds.append(x_bound[1])
 
             obj_params = np.array(self.obj_params)
             cons_params = np.array(self.cons_params).T

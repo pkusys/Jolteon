@@ -57,6 +57,11 @@ class Workflow:
             children = config[str(index)]['children']
             for c in children:
                 stage.add_child(self.stages[c])
+        
+        if self.perf_model_type == PerfModel.Jolteon.value:
+            for stage in self.stages:
+                has_parent = len(stage.parents) > 0
+                stage.perf_model.update_has_parent(has_parent)
                 
         # check dependency
         for stage in self.stages:
@@ -506,36 +511,40 @@ class Workflow:
                 else:
                     print(stage.stage_name)      
 
-    def predict(self, mode='latency', input_size=None):
-        assert isinstance(input_size, int) and input_size > 0
+    def predict(self, mode='latency'):
         assert mode in ['latency', 'cost']
         if mode == 'latency':
             paths = self.find_paths()
             latency = 0.0
             for path in paths:
                 tmp_latency = 0.0
-                parent_d = 1
+                parent_d = 0
                 for stage in path:
-                    tmp_latency += stage.perf_model.predict(stage.config['memory'], 
+                    tmp_latency += stage.perf_model.predict(stage.config['memory']/1792, 
                                                             stage.num_func, mode, 
-                                                            parent_d=parent_d,
-                                                            input_size=input_size)
+                                                            parent_d=parent_d)
                     parent_d = stage.num_func
                 if paths.index(path) == 0:
                     latency = tmp_latency
-                elif tmp_latency < latency:
+                elif tmp_latency > latency:
                     latency = tmp_latency
+            return latency
         else:
             cost = 0.0
             for stage in self.stages:
-                cost += stage.perf_model.predict(stage.config['memory'],
+                parent_d = 0
+                if not stage.allow_parallel:
+                    for i in range(len(stage.parents)-1, -1, -1):
+                        if stage.parents[i].allow_parallel:
+                            parent_d = stage.parents[i].num_func
+                            break
+                cost += stage.perf_model.predict(stage.config['memory']/1792,
                                                  stage.num_func, mode,
-                                                 input_size=input_size)
+                                                 parent_d=parent_d)
             return cost
 
     def store_params(self):
         res = np.concatenate([stage.perf_model.params() for stage in self.stages])
-
         res = res.tolist()
         param_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         param_dir = os.path.join(param_dir, 'params/')
@@ -546,6 +555,11 @@ class Workflow:
         param_path = os.path.join(param_dir, param_path)
         json.dump(res, open(param_path, 'w'))
         return param_path
+
+    def get_params(self):
+        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+        res = res.tolist()
+        return res
 
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
@@ -560,6 +574,12 @@ class Workflow:
         sample_path = os.path.join(sample_dir, sample_path)
         json.dump(res, open(sample_path, 'w'))
         return sample_path
+
+    def sample_online(self, num_samples):
+        assert isinstance(num_samples, int) and num_samples > 0
+        res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
+        res = res.tolist()
+        return res
 
     def prune_samples(self, samples):
         # is_greater_than_others = np.ones(samples.shape[0], dtype=bool)
@@ -640,11 +660,10 @@ class Workflow:
         parent_ids = [-1 for _ in range(len(self.stages))]
         for stage in self.stages:
             if not stage.allow_parallel:
-                for i in range(len(stage.parents)):
+                for i in range(len(stage.parents)-1, -1, -1):
                     if stage.parents[i].allow_parallel:
                         parent_ids[stage.stage_id] = stage.parents[i].stage_id
                         break
-                # print('Stage', stage.stage_id, 'parent_id:', parent_ids[stage.stage_id])
 
         s = 'import numpy as np\n\n'
         if solver_type == 'pyomo':
