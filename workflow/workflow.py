@@ -2,11 +2,12 @@ from multiprocessing import Pool
 import time
 import json
 import os
+from deprecation import deprecated
 import numpy as np
 
 from stage import Stage, Status, PerfModel
-from perf_model import StagePerfModel, config_pairs, step_names
-from perf_model_dist import config_pairs as dist_config_pairs
+from perf_model import StagePerfModel, config_pairs, step_names, get_config_pairs
+from perf_model_dist import config_pairs as dist_config_pairs, get_config_pairs_dist
 from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
 
 class Workflow:
@@ -57,6 +58,11 @@ class Workflow:
             children = config[str(index)]['children']
             for c in children:
                 stage.add_child(self.stages[c])
+        
+        if self.perf_model_type == PerfModel.Jolteon.value:
+            for stage in self.stages:
+                has_parent = len(stage.parents) > 0
+                stage.perf_model.update_has_parent(has_parent)
                 
         # check dependency
         for stage in self.stages:
@@ -183,16 +189,127 @@ class Workflow:
     def eager_execute(self):
         raise NotImplementedError
     
-    def profile(self, num_epochs = 2) -> str:
-        if self.perf_model_type == PerfModel.Jolteon.value:
+    def profile(self, num_epochs = 3) -> str:
+        # if self.perf_model_type == PerfModel.Jolteon.value:
+        #     return self.profile_jolteon(num_epochs)
+        # elif self.perf_model_type == PerfModel.Distribution.value:
+        #     return self.profile_dist(num_epochs)
+        # elif self.perf_model_type == PerfModel.Analytical.value:
+        #     return self.profile_analytic(num_epochs)
+        # else:
+        #     raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
+        if self.perf_model_type in [PerfModel.Jolteon.value, PerfModel.Distribution.value, PerfModel.Analytical.value]:
             return self.profile_jolteon(num_epochs)
-        elif self.perf_model_type == PerfModel.Distribution.value:
-            return self.profile_dist(num_epochs)
-        elif self.perf_model_type == PerfModel.Analytical.value:
-            raise NotImplementedError
         else:
             raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
+    
+    def profile_jolteon(self, num_epochs) -> str:
+        # Use different configurations to profile, 
+        # profile multiple epochs under the same configuration
+        # and write the results to a storage (S3 or local) or pass to the performance model
+        assert isinstance(num_epochs, int) and num_epochs > 0 
         
+        # Organize the results into an array divided according to each stage
+        # res is a dict of stage_name, res[stage_name] is a dict of step_name;
+        # res[stage_name][step_name] is a 3D array with shape (num_epochs, num_config_pairs, 2)
+        res = dict()
+        config_pairs_ = get_config_pairs(self.workflow_name)
+        for stage in self.stages:
+            res[stage.stage_name] = dict()
+            for step_name in step_names:
+                res[stage.stage_name][step_name] = np.zeros((num_epochs, len(config_pairs_), 2)).tolist()
+        
+        try:
+            for config_pair in config_pairs_:
+                print('Config:', config_pair)
+                for stage in self.stages:
+                    mem_size, num_func = config_pair
+                    if not stage.update_config(mem_size, num_func):
+                        raise Exception('Config update failed')
+                    '''
+                        Warm-up dummy run is currently not adequate, since too frequent 
+                    Lambda invocation cause the following error:
+                        botocore.errorfactory.ResourceConflictException: An error occurred 
+                        (ResourceConflictException) when calling the UpdateFunctionConfiguration 
+                        operation: The operation cannot be performed at this time. 
+                        An update is in progress for resource: arn:aws:lambda:us-east-1:325476609965:function:ML-Pipeline-stage3
+                    
+                        This is probably because the asynchronous update of Lambda configuration or 
+                    the collision of Lambda invocation and configuration update.
+                    '''
+                    # stage.status = Status.RUNNING
+                    # r = stage.execute(dummy=1)
+                
+                for epoch_id in range(num_epochs):
+                    print('Epoch:', epoch_id)
+                    self.init_stage_status()
+                    clear_dir = self.workflow_name + '/stage'
+                    clear_dir = clear_dir.replace('-', '_')  # adequate for ML-Pipeline and ML_Pipeline
+                    clear_data(clear_dir)
+                    epoch_res = self.lazy_execute()
+
+                    infos = []
+                    time_list = []
+                    times_list = []
+                    for ids, r in enumerate(epoch_res):
+                        l = []
+                        for ids_, result in enumerate(r):
+                            if ids_ == 0:
+                                time_list.append(result)
+                                continue
+                            info = extract_info_from_log(result[1])
+                            infos.append(info)
+                            rd = json.loads(result[0])
+                            if 'statusCode' not in rd:
+                                print(rd)
+                                raise Exception('Lambda execution error')
+                            rd = json.loads(rd['body'])
+                            l.append(rd['breakdown'])
+                        times_list.append(l)
+                    cost = 0
+                    for info in infos:
+                        cost += info['bill']
+                    print('Cost:', cost, '$')
+                    for idx, t in enumerate(time_list):
+                        print('Stage', idx, 'time:', t)
+                        print(times_list[idx])
+                        tt = np.array(times_list[idx])
+                        tt = tt.T[:4]
+                        tt[1] = tt[3] - tt[0] - tt[2]  # Add potential multi-thread overhead to compute
+                        avg_tt = np.mean(tt, axis=1)
+                        max_tt = np.percentile(tt, 95, axis=1)
+                        cold_tt_avg = t - avg_tt[3]
+                        cold_tt_max = t - np.sum(max_tt[:3])
+                        print('Avg:', avg_tt)
+                        print('Max:', max_tt)
+                        print('Cold:', cold_tt_avg, cold_tt_max)
+                        print('\n')
+                        stage_name = self.stages[idx].stage_name
+                        config_id = config_pairs_.index(config_pair)
+                        res[stage_name]['cold'][epoch_id][config_id] = [cold_tt_avg, cold_tt_max]
+                        res[stage_name]['read'][epoch_id][config_id] = [avg_tt[0], max_tt[0]]
+                        res[stage_name]['compute'][epoch_id][config_id] = [avg_tt[1], max_tt[1]]
+                        res[stage_name]['write'][epoch_id][config_id] = [avg_tt[2], max_tt[2]]
+                    print('\n\n')
+                print('\n\n\n')
+
+            # Persist the results
+            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            prof_dir = os.path.join(prof_dir, 'profiles/')
+            if not os.path.exists(prof_dir):
+                os.mkdir(prof_dir)
+            prof_path = self.workflow_name + '_profile.json'
+            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+            prof_path = os.path.join(prof_dir, prof_path)
+            json.dump(res, open(prof_path, 'w'))
+            return prof_path
+        
+        except Exception as e:
+            print(res)
+            print('\n\n')
+            raise e
+        
+    @deprecated
     def profile_dist(self, num_epochs) -> str:
         assert isinstance(num_epochs, int) and num_epochs > 0
         res = dict()
@@ -262,15 +379,10 @@ class Workflow:
             print('\n\n')
             raise e
 
-    def profile_jolteon(self, num_epochs) -> str:
-        # Use different configurations to profile, 
-        # profile multiple epochs under the same configuration
-        # and write the results to a storage (S3 or local) or pass to the performance model
+    @deprecated
+    def profile_analytic(self, num_epochs) -> str:
         assert isinstance(num_epochs, int) and num_epochs > 0 
         
-        # Organize the results into an array divided according to each stage
-        # res is a dict of stage_name, res[stage_name] is a dict of step_name;
-        # res[stage_name][step_name] is a 3D array with shape (num_epochs, num_config_pairs, 2)
         res = dict()
         for stage in self.stages:
             res[stage.stage_name] = dict()
@@ -284,19 +396,6 @@ class Workflow:
                     mem_size, num_func = config_pair
                     if not stage.update_config(mem_size, num_func):
                         raise Exception('Config update failed')
-                    '''
-                        Warm-up dummy run is currently not adequate, since too frequent 
-                    Lambda invocation cause the following error:
-                        botocore.errorfactory.ResourceConflictException: An error occurred 
-                        (ResourceConflictException) when calling the UpdateFunctionConfiguration 
-                        operation: The operation cannot be performed at this time. 
-                        An update is in progress for resource: arn:aws:lambda:us-east-1:325476609965:function:ML-Pipeline-stage3
-                    
-                        This is probably because the asynchronous update of Lambda configuration or 
-                    the collision of Lambda invocation and configuration update.
-                    '''
-                    # stage.status = Status.RUNNING
-                    # r = stage.execute(dummy=1)
                 
                 for epoch_id in range(num_epochs):
                     print('Epoch:', epoch_id)
@@ -356,7 +455,7 @@ class Workflow:
             prof_dir = os.path.join(prof_dir, 'profiles/')
             if not os.path.exists(prof_dir):
                 os.mkdir(prof_dir)
-            prof_path = self.workflow_name + '_profile_jolteon.json'
+            prof_path = self.workflow_name + '_profile_analytic.json'
             prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
             prof_path = os.path.join(prof_dir, prof_path)
             json.dump(res, open(prof_path, 'w'))
@@ -370,9 +469,9 @@ class Workflow:
     def train_perf_model(self, profile_path):
         t0 = time.time()
         assert isinstance(profile_path, str) and os.path.exists(profile_path)
+        get_config_pairs(self.workflow_name)
+        get_config_pairs_dist(self.workflow_name)
         for stage in self.stages:
-            # if (self.stages.index(stage) != 1):
-            #     continue
             stage.perf_model.train(profile_path)
             
         if self.perf_model_type == PerfModel.Distribution.value:
@@ -418,36 +517,40 @@ class Workflow:
                 else:
                     print(stage.stage_name)      
 
-    def predict(self, mode='latency', input_size=None):
-        assert isinstance(input_size, int) and input_size > 0
+    def predict(self, mode='latency'):
         assert mode in ['latency', 'cost']
         if mode == 'latency':
             paths = self.find_paths()
             latency = 0.0
             for path in paths:
                 tmp_latency = 0.0
-                parent_d = 1
+                parent_d = 0
                 for stage in path:
-                    tmp_latency += stage.perf_model.predict(stage.config['memory'], 
+                    tmp_latency += stage.perf_model.predict(stage.config['memory']/1792, 
                                                             stage.num_func, mode, 
-                                                            parent_d=parent_d,
-                                                            input_size=input_size)
+                                                            parent_d=parent_d)
                     parent_d = stage.num_func
                 if paths.index(path) == 0:
                     latency = tmp_latency
-                elif tmp_latency < latency:
+                elif tmp_latency > latency:
                     latency = tmp_latency
+            return latency
         else:
             cost = 0.0
             for stage in self.stages:
-                cost += stage.perf_model.predict(stage.config['memory'],
+                parent_d = 0
+                if not stage.allow_parallel:
+                    for i in range(len(stage.parents)-1, -1, -1):
+                        if stage.parents[i].allow_parallel:
+                            parent_d = stage.parents[i].num_func
+                            break
+                cost += stage.perf_model.predict(stage.config['memory']/1792,
                                                  stage.num_func, mode,
-                                                 input_size=input_size)
+                                                 parent_d=parent_d)
             return cost
 
     def store_params(self):
         res = np.concatenate([stage.perf_model.params() for stage in self.stages])
-
         res = res.tolist()
         param_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         param_dir = os.path.join(param_dir, 'params/')
@@ -459,20 +562,14 @@ class Workflow:
         json.dump(res, open(param_path, 'w'))
         return param_path
 
+    def get_params(self):
+        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+        res = res.tolist()
+        return res
+
     def sample_offline(self, num_samples):
         assert isinstance(num_samples, int) and num_samples > 0
         res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
-
-        # # Prune the samples
-        # is_greater_than_others = np.ones(res.shape[0], dtype=bool)
-        # # is_less_than_another = np.zeros(res.shape[0], dtype=bool)
-        # for i in range(res.shape[0]):
-        #     is_greater_than_others[i] = np.all(np.all(res[i] > res[np.arange(res.shape[0]) != i], axis=1))
-        #     # is_less_than_another[i] = np.any(np.all(res[i] < res[np.arange(res.shape[0]) != i], axis=1))
-        # vecs = res[is_greater_than_others]
-        # # vecs = vecs[is_less_than_another]
-        # print(vecs.shape[0])
-        
         res = res.tolist()
         sample_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         sample_dir = os.path.join(sample_dir, 'samples/')
@@ -484,11 +581,22 @@ class Workflow:
         json.dump(res, open(sample_path, 'w'))
         return sample_path
 
-    def fuse_samples_online(self, sample_path, num_fused_samples):
-        assert isinstance(sample_path, str) and sample_path.endswith('.json')
-        assert isinstance(num_fused_samples, int) and num_fused_samples > 0
-        # TODO: fuse like k-means
-        pass
+    def sample_online(self, num_samples):
+        assert isinstance(num_samples, int) and num_samples > 0
+        res = np.concatenate([stage.perf_model.sample_offline(num_samples) for stage in self.stages], axis=1)
+        res = res.tolist()
+        return res
+
+    def prune_samples(self, samples):
+        # is_greater_than_others = np.ones(samples.shape[0], dtype=bool)
+        is_less_than_another = np.zeros(samples.shape[0], dtype=bool)
+        for i in range(samples.shape[0]):
+            # is_greater_than_others[i] = np.all(np.all(samples[i] > samples[np.arange(res.shape[0]) != i], axis=1))
+            is_less_than_another[i] = np.any(np.all(samples[i] < samples[np.arange(res.shape[0]) != i], axis=1))
+        # res = samples[is_greater_than_others]
+        res = samples[is_less_than_another]
+        # print(res.shape[0])
+        return res
     
     def update_workflow_config(self, mem_list, parall_list):
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
@@ -512,6 +620,32 @@ class Workflow:
         assert isinstance(file_path, str) and file_path.endswith('.json')
         return json.load(open(file_path, 'r'))
     
+    def load_samples(self, file_path, num_samples):
+        assert isinstance(file_path, str) and file_path.endswith('.json') and \
+            isinstance(num_samples, int) and num_samples > 0
+        
+        samples = json.load(open(file_path, 'r'))
+        return samples[:num_samples]
+
+    def metadata_path(self, meta_type):
+        assert meta_type in ['profiles', 'params', 'samples']
+        meta_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        meta_dir = os.path.join(meta_dir, meta_type + '/')
+        if meta_type == 'profiles':
+            meta_type = 'profile'
+            # if self.perf_model_type == PerfModel.Distribution.value:
+            #     meta_type = 'profile_dist'
+            # elif self.perf_model_type == PerfModel.Analytical.value:
+            #     meta_type = 'profile_analytic'
+            # elif self.perf_model_type == PerfModel.Jolteon.value:
+            #     meta_type = 'profile_jolteon'
+        meta_path = self.workflow_name + '_' + meta_type + '.json'
+        meta_path = meta_path.replace('/', '-')
+        meta_path = os.path.join(meta_dir, meta_path)
+        if not os.path.exists(meta_path):
+            raise Exception('Path does not exist')
+        return meta_path
+    
     '''
         Generate the python code for the objective function and constraints used by the solver
     Currently, we use the scipy.optimize as the solver and use numpy as the matrix library. 
@@ -524,7 +658,7 @@ class Workflow:
         assert isinstance(critical_path, list) 
         assert secondary_path is None or isinstance(secondary_path, list)
         assert cons_mode in ['latency', 'cost']
-        assert solver_type in ['scipy', 'pyomo']
+        assert solver_type == 'scipy'
         code_dir = os.path.dirname(os.path.abspath(__file__))
         code_path = os.path.join(code_dir, file_name)
         obj_mode = 'cost' if cons_mode == 'latency' else 'latency'
@@ -532,11 +666,10 @@ class Workflow:
         parent_ids = [-1 for _ in range(len(self.stages))]
         for stage in self.stages:
             if not stage.allow_parallel:
-                for i in range(len(stage.parents)):
+                for i in range(len(stage.parents)-1, -1, -1):
                     if stage.parents[i].allow_parallel:
                         parent_ids[stage.stage_id] = stage.parents[i].stage_id
                         break
-                # print('Stage', stage.stage_id, 'parent_id:', parent_ids[stage.stage_id])
 
         s = 'import numpy as np\n\n'
         if solver_type == 'pyomo':
@@ -632,7 +765,7 @@ class Workflow:
 
 
 if __name__ == '__main__':
-    test_mode = 'lazy' # 'step_by_step' 'lazy' 'perf_model'
+    test_mode = 'perf_model' # 'step_by_step' 'lazy' 'perf_model'
     
     if test_mode == 'step_by_step':
         wf = Workflow( './tpcds-dsq95.json')
@@ -740,7 +873,7 @@ if __name__ == '__main__':
         wf.close_pools()
     elif test_mode == 'perf_model':
         # wf = Workflow('./tpcds-dsq95.json')
-        wf = Workflow('./ML-pipeline.json', 1)
+        wf = Workflow('./ML-pipeline.json', 0)
         # p = wf.profile(5)
         # print(p)
         p = '../profiles/ML-Pipeline_profile.json'
@@ -748,7 +881,7 @@ if __name__ == '__main__':
 
         param_path = wf.store_params()
         t0 = time.time()
-        sample_path = wf.sample_offline(3)
+        sample_path = wf.sample_offline(10000)
         t1 = time.time()
         print('Sample time:', t1-t0, 's\n\n')
 
@@ -761,7 +894,7 @@ if __name__ == '__main__':
         from funcs import objective_func, constraint_func
         if wf.secondary_path is not None:
             from funcs import constraint_func_2 
-        bound = 1000
+        bound = 35
         obj_params = wf.load_params(param_path)
         cons_params = wf.load_params(sample_path)
         solver = PCPSolver(2*len(wf.stages), objective_func, constraint_func, 

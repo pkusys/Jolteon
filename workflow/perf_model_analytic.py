@@ -11,7 +11,7 @@ step_names = ['read', 'compute', 'write']
 def io_func(x, a, b):
     return a / x + b
 
-def comp_func(x, a, b, c, d):
+def comp_func(x, a, b):
     return a / x + b
 
 '''
@@ -44,8 +44,12 @@ class AnaPerfModel:
         
         arr_x = np.array(arr_x)
         arr_y = np.array(arr_y)
+
+        initial_guess = [1, 1]
         
-        params, _ = scipy_opt.curve_fit(func, arr_x, arr_y)
+        # Two parameters' covariance could not be estimated when use curve_fit, 
+        # so we use leastsq instead.
+        params, _ = scipy_opt.leastsq(lambda para, x, y: func(x, *para) - y, initial_guess, args=(arr_x, arr_y))
         
         return params.tolist()
         
