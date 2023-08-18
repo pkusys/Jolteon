@@ -191,7 +191,7 @@ TPC-DS/data/*
 **/package
 **.zip
 **tmp**
-profiles/*
-samples/*
-params/*
+# profiles/*
+# samples/*
+# params/*
 funcs.py

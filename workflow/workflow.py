@@ -2,11 +2,12 @@ from multiprocessing import Pool
 import time
 import json
 import os
+from deprecation import deprecated
 import numpy as np
 
 from stage import Stage, Status, PerfModel
-from perf_model import StagePerfModel, config_pairs, step_names
-from perf_model_dist import config_pairs as dist_config_pairs
+from perf_model import StagePerfModel, config_pairs, step_names, get_config_pairs
+from perf_model_dist import config_pairs as dist_config_pairs, get_config_pairs_dist
 from utils import MyThread, MyProcess, PCPSolver, extract_info_from_log, clear_data
 
 class Workflow:
@@ -201,7 +202,114 @@ class Workflow:
             return self.profile_jolteon(num_epochs)
         else:
             raise ValueError('Invalid performance model type: %d' % self.perf_model_type)
+    
+    def profile_jolteon(self, num_epochs) -> str:
+        # Use different configurations to profile, 
+        # profile multiple epochs under the same configuration
+        # and write the results to a storage (S3 or local) or pass to the performance model
+        assert isinstance(num_epochs, int) and num_epochs > 0 
         
+        # Organize the results into an array divided according to each stage
+        # res is a dict of stage_name, res[stage_name] is a dict of step_name;
+        # res[stage_name][step_name] is a 3D array with shape (num_epochs, num_config_pairs, 2)
+        res = dict()
+        config_pairs_ = get_config_pairs(self.workflow_name)
+        for stage in self.stages:
+            res[stage.stage_name] = dict()
+            for step_name in step_names:
+                res[stage.stage_name][step_name] = np.zeros((num_epochs, len(config_pairs_), 2)).tolist()
+        
+        try:
+            for config_pair in config_pairs_:
+                print('Config:', config_pair)
+                for stage in self.stages:
+                    mem_size, num_func = config_pair
+                    if not stage.update_config(mem_size, num_func):
+                        raise Exception('Config update failed')
+                    '''
+                        Warm-up dummy run is currently not adequate, since too frequent 
+                    Lambda invocation cause the following error:
+                        botocore.errorfactory.ResourceConflictException: An error occurred 
+                        (ResourceConflictException) when calling the UpdateFunctionConfiguration 
+                        operation: The operation cannot be performed at this time. 
+                        An update is in progress for resource: arn:aws:lambda:us-east-1:325476609965:function:ML-Pipeline-stage3
+                    
+                        This is probably because the asynchronous update of Lambda configuration or 
+                    the collision of Lambda invocation and configuration update.
+                    '''
+                    # stage.status = Status.RUNNING
+                    # r = stage.execute(dummy=1)
+                
+                for epoch_id in range(num_epochs):
+                    print('Epoch:', epoch_id)
+                    self.init_stage_status()
+                    clear_dir = self.workflow_name + '/stage'
+                    clear_dir = clear_dir.replace('-', '_')  # adequate for ML-Pipeline and ML_Pipeline
+                    clear_data(clear_dir)
+                    epoch_res = self.lazy_execute()
+
+                    infos = []
+                    time_list = []
+                    times_list = []
+                    for ids, r in enumerate(epoch_res):
+                        l = []
+                        for ids_, result in enumerate(r):
+                            if ids_ == 0:
+                                time_list.append(result)
+                                continue
+                            info = extract_info_from_log(result[1])
+                            infos.append(info)
+                            rd = json.loads(result[0])
+                            if 'statusCode' not in rd:
+                                print(rd)
+                                raise Exception('Lambda execution error')
+                            rd = json.loads(rd['body'])
+                            l.append(rd['breakdown'])
+                        times_list.append(l)
+                    cost = 0
+                    for info in infos:
+                        cost += info['bill']
+                    print('Cost:', cost, '$')
+                    for idx, t in enumerate(time_list):
+                        print('Stage', idx, 'time:', t)
+                        print(times_list[idx])
+                        tt = np.array(times_list[idx])
+                        tt = tt.T[:4]
+                        tt[1] = tt[3] - tt[0] - tt[2]  # Add potential multi-thread overhead to compute
+                        avg_tt = np.mean(tt, axis=1)
+                        max_tt = np.percentile(tt, 95, axis=1)
+                        cold_tt_avg = t - avg_tt[3]
+                        cold_tt_max = t - np.sum(max_tt[:3])
+                        print('Avg:', avg_tt)
+                        print('Max:', max_tt)
+                        print('Cold:', cold_tt_avg, cold_tt_max)
+                        print('\n')
+                        stage_name = self.stages[idx].stage_name
+                        config_id = config_pairs_.index(config_pair)
+                        res[stage_name]['cold'][epoch_id][config_id] = [cold_tt_avg, cold_tt_max]
+                        res[stage_name]['read'][epoch_id][config_id] = [avg_tt[0], max_tt[0]]
+                        res[stage_name]['compute'][epoch_id][config_id] = [avg_tt[1], max_tt[1]]
+                        res[stage_name]['write'][epoch_id][config_id] = [avg_tt[2], max_tt[2]]
+                    print('\n\n')
+                print('\n\n\n')
+
+            # Persist the results
+            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            prof_dir = os.path.join(prof_dir, 'profiles/')
+            if not os.path.exists(prof_dir):
+                os.mkdir(prof_dir)
+            prof_path = self.workflow_name + '_profile.json'
+            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
+            prof_path = os.path.join(prof_dir, prof_path)
+            json.dump(res, open(prof_path, 'w'))
+            return prof_path
+        
+        except Exception as e:
+            print(res)
+            print('\n\n')
+            raise e
+        
+    @deprecated
     def profile_dist(self, num_epochs) -> str:
         assert isinstance(num_epochs, int) and num_epochs > 0
         res = dict()
@@ -271,6 +379,7 @@ class Workflow:
             print('\n\n')
             raise e
 
+    @deprecated
     def profile_analytic(self, num_epochs) -> str:
         assert isinstance(num_epochs, int) and num_epochs > 0 
         
@@ -357,114 +466,11 @@ class Workflow:
             print('\n\n')
             raise e
 
-    def profile_jolteon(self, num_epochs) -> str:
-        # Use different configurations to profile, 
-        # profile multiple epochs under the same configuration
-        # and write the results to a storage (S3 or local) or pass to the performance model
-        assert isinstance(num_epochs, int) and num_epochs > 0 
-        
-        # Organize the results into an array divided according to each stage
-        # res is a dict of stage_name, res[stage_name] is a dict of step_name;
-        # res[stage_name][step_name] is a 3D array with shape (num_epochs, num_config_pairs, 2)
-        res = dict()
-        for stage in self.stages:
-            res[stage.stage_name] = dict()
-            for step_name in step_names:
-                res[stage.stage_name][step_name] = np.zeros((num_epochs, len(config_pairs), 2)).tolist()
-        
-        try:
-            for config_pair in config_pairs:
-                print('Config:', config_pair)
-                for stage in self.stages:
-                    mem_size, num_func = config_pair
-                    if not stage.update_config(mem_size, num_func):
-                        raise Exception('Config update failed')
-                    '''
-                        Warm-up dummy run is currently not adequate, since too frequent 
-                    Lambda invocation cause the following error:
-                        botocore.errorfactory.ResourceConflictException: An error occurred 
-                        (ResourceConflictException) when calling the UpdateFunctionConfiguration 
-                        operation: The operation cannot be performed at this time. 
-                        An update is in progress for resource: arn:aws:lambda:us-east-1:325476609965:function:ML-Pipeline-stage3
-                    
-                        This is probably because the asynchronous update of Lambda configuration or 
-                    the collision of Lambda invocation and configuration update.
-                    '''
-                    # stage.status = Status.RUNNING
-                    # r = stage.execute(dummy=1)
-                
-                for epoch_id in range(num_epochs):
-                    print('Epoch:', epoch_id)
-                    self.init_stage_status()
-                    clear_dir = self.workflow_name + '/stage'
-                    clear_dir = clear_dir.replace('-', '_')  # adequate for ML-Pipeline and ML_Pipeline
-                    clear_data(clear_dir)
-                    epoch_res = self.lazy_execute()
-
-                    infos = []
-                    time_list = []
-                    times_list = []
-                    for ids, r in enumerate(epoch_res):
-                        l = []
-                        for ids_, result in enumerate(r):
-                            if ids_ == 0:
-                                time_list.append(result)
-                                continue
-                            info = extract_info_from_log(result[1])
-                            infos.append(info)
-                            rd = json.loads(result[0])
-                            if 'statusCode' not in rd:
-                                print(rd)
-                                raise Exception('Lambda execution error')
-                            rd = json.loads(rd['body'])
-                            l.append(rd['breakdown'])
-                        times_list.append(l)
-                    cost = 0
-                    for info in infos:
-                        cost += info['bill']
-                    print('Cost:', cost, '$')
-                    for idx, t in enumerate(time_list):
-                        print('Stage', idx, 'time:', t)
-                        print(times_list[idx])
-                        tt = np.array(times_list[idx])
-                        tt = tt.T[:4]
-                        tt[1] = tt[3] - tt[0] - tt[2]  # Add potential multi-thread overhead to compute
-                        avg_tt = np.mean(tt, axis=1)
-                        max_tt = np.percentile(tt, 95, axis=1)
-                        cold_tt_avg = t - avg_tt[3]
-                        cold_tt_max = t - np.sum(max_tt[:3])
-                        print('Avg:', avg_tt)
-                        print('Max:', max_tt)
-                        print('Cold:', cold_tt_avg, cold_tt_max)
-                        print('\n')
-                        stage_name = self.stages[idx].stage_name
-                        config_id = config_pairs.index(config_pair)
-                        res[stage_name]['cold'][epoch_id][config_id] = [cold_tt_avg, cold_tt_max]
-                        res[stage_name]['read'][epoch_id][config_id] = [avg_tt[0], max_tt[0]]
-                        res[stage_name]['compute'][epoch_id][config_id] = [avg_tt[1], max_tt[1]]
-                        res[stage_name]['write'][epoch_id][config_id] = [avg_tt[2], max_tt[2]]
-                    print('\n\n')
-                print('\n\n\n')
-
-            # Persist the results
-            prof_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            prof_dir = os.path.join(prof_dir, 'profiles/')
-            if not os.path.exists(prof_dir):
-                os.mkdir(prof_dir)
-            prof_path = self.workflow_name + '_profile.json'
-            prof_path = prof_path.replace('/', '-')  # transfer '/' in profile_path to '-'
-            prof_path = os.path.join(prof_dir, prof_path)
-            json.dump(res, open(prof_path, 'w'))
-            return prof_path
-        
-        except Exception as e:
-            print(res)
-            print('\n\n')
-            raise e
-
     def train_perf_model(self, profile_path):
         t0 = time.time()
         assert isinstance(profile_path, str) and os.path.exists(profile_path)
+        get_config_pairs(self.workflow_name)
+        get_config_pairs_dist(self.workflow_name)
         for stage in self.stages:
             stage.perf_model.train(profile_path)
             

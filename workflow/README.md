@@ -17,7 +17,7 @@ python3 -u scheduler.py -w video -p 1 > tmp.log
 
 2. Train
 ```
-python3 -u scheduler.py -w ml -t 1 > tmp.log
+python3 -u scheduler.py -w ml -t 1 > tmp1.log
 python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 python3 -u scheduler.py -w video -t 1 > tmp.log
 ```
