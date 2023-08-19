@@ -188,6 +188,10 @@ class StagePerfModel:
                 self.can_intra_parallel[1] = True
                 self.compute_params_avg = popt2
                 self.compute_cov_avg = pcov2
+
+            if self.stage_id == 1:
+                print(self.compute_params_avg)
+                print(self.compute_cov_avg)
             # print('Compute')
             # print('d error avg:', err1)
             # print('kd error avg:', err2)
@@ -489,11 +493,12 @@ class StagePerfModel:
         # Sample for num_samples times
         res = {'cold': [], 'read': [], 'compute': [], 'write': []}
         # seed_val = int(time.time())
-        seed_val = 31729  # Great magic number!
+        seed_val = 0
         rng = np.random.default_rng(seed=seed_val)
         res['cold'] = rng.choice(self.cold_params_avg, num_samples)
         res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
                                               num_samples)
+        print(res['read'].shape)
         res['compute'] = rng.multivariate_normal(self.compute_params_avg, 
                                                  self.compute_cov_avg, 
                                                  num_samples)

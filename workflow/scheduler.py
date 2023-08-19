@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 
 from workflow import Workflow
+from perf_model import config_pairs
 from perf_model_dist import eq_vcpu_alloc
 from utils import MyQueue, PCPSolver, extract_info_from_log, clear_data
 
@@ -19,7 +20,7 @@ class Scheduler(ABC):
         self.workflow = workflow
 
 class Jolteon(Scheduler):
-    def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000):
+    def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000, ftol=1):
         super().__init__(workflow)
         self.storage_mode = storage_mode
         self.num_funcs = []
@@ -34,6 +35,7 @@ class Jolteon(Scheduler):
         self.solver = None
         self.obj_params = None
         self.cons_params = None
+        self.ftol = ftol
 
     def set_bound(self, bound_type, bound, service_level):
         # service_level is the probability that the latencty or cost is less than the bound
@@ -67,8 +69,37 @@ class Jolteon(Scheduler):
                                          self.workflow.secondary_path, 
                                          cons_mode=self.bound_type)
 
+    def round_config(self, x):
+        # x is a list of the number of functions and vcpus for each stage, aligned with res['x']
+        num_funcs = []
+        num_vcpus = []
+        for i, stage in enumerate(self.workflow.stages):
+            num_func = int(x[2*i])
+            # input stages round up to the nearest 2^n
+            if self.workflow.workflow_name == 'ML-Pipeline' and stage.stage_id == 1:
+                if num_func < 1:
+                    num_func = 1
+                else:
+                    num_func = 2 ** math.ceil(math.log(num_func, 2))
+            if stage.allow_parallel is False:
+                num_func = 1
+            
+            num_vcpu = x[2*i+1]
+            if num_vcpu < 1:
+                threshold = 1024 / 1792
+                if num_vcpu > threshold:
+                    num_vcpu = round(num_vcpu, 1)
+                else:
+                    num_vcpu = threshold
+            else:
+                num_vcpu = round(num_vcpu, 1)
+            num_funcs.append(num_func)
+            num_vcpus.append(num_vcpu)
+        return num_funcs, num_vcpus
+
+
     def search_config(self, param_path=None, sample_path=None, 
-                      init_vals=None, x_bound=None, load=False):
+                      init_vals=None, x_bound=None, load=True):
         # Assume the functions have been generated
         from funcs import objective_func, constraint_func
         if self.workflow.secondary_path is not None:
@@ -80,39 +111,40 @@ class Jolteon(Scheduler):
             self.obj_params = self.workflow.load_params(param_path)
             num_samples = PCPSolver.sample_size(len(self.workflow.stages), self.risk, 0, 
                                                 self.confidence_error)
+            print('Sample size:', num_samples)
             self.cons_params = self.workflow.load_samples(sample_path, num_samples)
             t1 = time.time()
             print('Load time:', t1-t0, 's\n\n')
 
+        t0 = time.time()
         self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
                                 self.bound, self.obj_params, self.cons_params, 
                                 risk=self.risk, confidence_error=self.confidence_error)
 
-        res = self.solver.solve(init_vals=init_vals, x_bound=x_bound)
-
-        print(res)
-
-        if not res['status']:
-            raise ValueError('Cannot find a feasible solution')
-        x = res['x']
-        for i, stage in enumerate(self.workflow.stages):
-            num_funcs = int(x[2*i]) + 1
-            if stage.allow_parallel is False:
-                num_funcs = 1
-            num_vcpus = x[2*i+1]
-            if num_vcpus < 1:
-                threshold = 1024 / 1792
-                if num_vcpus > threshold:
-                    num_vcpus = 1
-                else:
-                    num_vcpus = threshold
+        while True:
+            res = self.solver.solve(init_vals=init_vals, x_bound=x_bound)
+            if res['status']:
+                break
             else:
-                num_vcpus = int(num_vcpus)
-            self.num_funcs.append(int(num_funcs))
-            self.num_vcpus.append(num_vcpus)
+                cons_val = np.array(res['cons_val'])
+                ratio_not_satisfied = np.sum(cons_val > self.ftol) / len(cons_val)
+                if ratio_not_satisfied < self.risk:
+                    break
+                else:
+                    if self.bound_type == 'latency':
+                        self.solver.bound -= 5
+                    else:
+                        self.solver.bound -= 10
+        t1 = time.time()
+        print('Solve time:', t1-t0, 's\n\n')
+
+        print('Final bound:', self.solver.bound)
+        print(res)
         
-        print(self.num_funcs)
-        print(self.num_vcpus)
+        self.num_funcs, self.num_vcpus = self.round_config(res['x'])
+        
+        print('num_funcs:', self.num_funcs)
+        print('num_vcpus:', self.num_vcpus)
 
         x = []
         for i in range(len(self.workflow.stages)):
@@ -120,9 +152,9 @@ class Jolteon(Scheduler):
             x.append(self.num_vcpus[i])
         print('Final obj:', objective_func(x, self.obj_params))
 
-    def set_config(self):
+    def set_config(self, real=True):
         mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
-        self.workflow.update_workflow_config(mem_list, self.num_funcs)
+        self.workflow.update_workflow_config(mem_list, self.num_funcs, real)
 
 
 class Caerus(Scheduler):
@@ -556,17 +588,22 @@ def main():
             scheduler.set_confidence(args.confidence)
             scheduler.generate_func_code()
 
+            x_bound = [(4, None), (0.5, None)]
+            if args.workflow == 'ml':
+                x_bound = [(1, 2), (0.5, 4.05), (8, 32), (0.5, 4.05), (4, 32), (0.5, 4.05), (1, 2), (0.5, 4.05)]
+            elif args.workflow == 'video':
+                x_bound = [(1, 32), (0.5, 3.05)]
+            elif args.workflow == 'tpcds':
+                x_bound = [(1, 32), (0.5, 2.05)]
+            
+            x_init = [1, 2, 8, 2, 8, 2, 1, 2]
+            # for i in range(len(x_init)):
+            #     x_init[i] = int((x_bound[i][0] + x_bound[i][1]) / 2)
+
             param_path = wf.metadata_path('params')
             sample_path = wf.metadata_path('samples')
-            t0 = time.time()
-            scheduler.get_params_and_samples()
-            t1 = time.time()
-            print('Sample time:', t1-t0, 's\n\n')
-            t0 = time.time()
-            scheduler.search_config(param_path, sample_path, x_bound=[(1, 32), (0.5, 3.05)])
-            t1 = time.time()
-            print('Search time:', t1-t0, 's\n\n')
-            scheduler.set_config()
+            scheduler.search_config(param_path, sample_path, x_bound=x_bound, init_vals=x_init)
+            scheduler.set_config(False)
         elif args.scheduler == 'orion':
             scheduler = Orion(wf)
             scheduler.comp_ratio()

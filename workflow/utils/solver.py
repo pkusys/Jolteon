@@ -71,7 +71,7 @@ class PCPSolver:
     Solve the sample approximation problem
     @param init_vals: initial values for the optimization variables, single value or list or numpy array
     @param x_bound: optional bounds for each optimization variable, single tuple or list of tuples, 
-                    default to (0.75, None)
+                    default to (0.5, None)
     @return: a dictionary containing the solution status, the optimal objective value, 
             the constraint values, and the optimal solution
     '''
@@ -91,7 +91,7 @@ class PCPSolver:
 
             X_bounds = [(0.5, None) for _ in range(self.num_X)] # optional bounds for each x
             if x_bound is not None:
-                if isinstance(x_bound, tuple) and len(x_bound) ==2:
+                if isinstance(x_bound, tuple) and len(x_bound) == 2:
                     X_bounds = [x_bound for _ in range(self.num_X)]
                 elif isinstance(x_bound, list) and len(x_bound) == self.num_X:
                     X_bounds = x_bound
@@ -110,14 +110,19 @@ class PCPSolver:
                 nonlinear_constraints = [nonlinear_constraints, nonlinear_constraints_2]
             
             res = scipy_opt.minimize(lambda x: self.objective(x, obj_params), x0, 
-                                     method=self.solver_info['method'], bounds=X_bounds, 
-                                     constraints=nonlinear_constraints)
+                                     method=self.solver_info['method'],
+                                     bounds=X_bounds, 
+                                     constraints=nonlinear_constraints,
+                                     options={'ftol': 1, 'disp': True})
             
             solve_res = {}
             solve_res['status'] = res.success
             solve_res['obj_val'] = res.fun
             solve_res['cons_val'] = self.constraint(res.x, cons_params, self.bound)
             solve_res['x'] = res.x
+
+            print(res)
+            print('\n\n')
 
             return solve_res
         else:

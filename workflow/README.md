@@ -24,7 +24,7 @@ python3 -u scheduler.py -w video -t 1 > tmp.log
 
 3. Run
 ```
-python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 150 > tmp.log
 ```
 

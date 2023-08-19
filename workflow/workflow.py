@@ -598,16 +598,21 @@ class Workflow:
         # print(res.shape[0])
         return res
     
-    def update_workflow_config(self, mem_list, parall_list):
+    def update_workflow_config(self, mem_list, parall_list, real=True):
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
         assert len(parall_list) == len(mem_list)
         assert len(parall_list) == len(self.stages)
 
         ret = []
         
-        for i in range(len(self.stages)):
-            r = self.stages[i].update_config(mem_list[i], parall_list[i])
-            ret.append(r)
+        if real:
+            for i in range(len(self.stages)):
+                r = self.stages[i].update_config(mem_list[i], parall_list[i])
+                ret.append(r)
+        else:
+            for i in range(len(self.stages)):
+                self.stages[i].config['memory'] = mem_list[i]
+                self.stages[i].num_func = parall_list[i]
         
         check = True
         for r in ret:
