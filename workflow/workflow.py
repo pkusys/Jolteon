@@ -528,7 +528,8 @@ class Workflow:
                 for stage in path:
                     tmp_latency += stage.perf_model.predict(stage.config['memory']/1792, 
                                                             stage.num_func, mode, 
-                                                            parent_d=parent_d)
+                                                            parent_d=parent_d,
+                                                            cold_percent=60)
                     parent_d = stage.num_func
                 if paths.index(path) == 0:
                     latency = tmp_latency
@@ -546,7 +547,8 @@ class Workflow:
                             break
                 cost += stage.perf_model.predict(stage.config['memory']/1792,
                                                  stage.num_func, mode,
-                                                 parent_d=parent_d)
+                                                 parent_d=parent_d,
+                                                 cold_percent=20)
             return cost
 
     def store_params(self):
@@ -648,7 +650,7 @@ class Workflow:
         meta_path = meta_path.replace('/', '-')
         meta_path = os.path.join(meta_dir, meta_path)
         if not os.path.exists(meta_path):
-            raise Exception('Path does not exist')
+            raise Exception('Path does not exist: ' + meta_path)
         return meta_path
     
     '''

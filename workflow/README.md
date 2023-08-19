@@ -48,3 +48,25 @@ python3 -u scheduler.py -w ml -s ditto -bt latency > tmp.log
 ```
 python3 -u scheduler.py -w ml -s caerus > tmp.log
 ```
+
+# Run overall performance 
+
+Latency bound
+Run each command for 6 times and take the last 5 results to eliminate the cold start effect.
+```
+python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 25 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 67 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 500 > tmp.log
+
+python3 -u scheduler.py -w ml -bt cost -bv 800 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 900 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 2000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 3000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 5000 > tmp.log
+```

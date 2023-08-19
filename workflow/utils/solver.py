@@ -18,6 +18,7 @@ class PCPSolver:
                  bound, obj_params, cons_params, 
                  constraint_2=None,
                  risk=0.05, approx_risk=0, confidence_error=0.001, 
+                 ftol=1, 
                  solver_info={'optlib': 'scipy', 'method': 'SLSQP'}) -> None:
         assert isinstance(num_X, int) and num_X > 0
         assert callable(objective) and callable(constraint)
@@ -32,6 +33,7 @@ class PCPSolver:
             (isinstance(approx_risk, float) and approx_risk > 0 and approx_risk < 1)
         assert isinstance(confidence_error, float) and confidence_error > 0 and \
             confidence_error < 1
+        assert ftol > 0
         assert isinstance(solver_info, dict) and 'optlib' in solver_info and \
             'method' in solver_info
 
@@ -51,6 +53,8 @@ class PCPSolver:
         # objective value or the feasibility of the solution or both, 
         # depending on the relationship between epsilon and alpha, default to 0.01
         self.confidence_error = confidence_error
+
+        self.ftol = ftol
         # Solver information for the sample approximation problem
         self.solver_info = solver_info
 
@@ -113,16 +117,13 @@ class PCPSolver:
                                      method=self.solver_info['method'],
                                      bounds=X_bounds, 
                                      constraints=nonlinear_constraints,
-                                     options={'ftol': 1, 'disp': True})
+                                     options={'ftol': self.ftol, 'disp': False})
             
             solve_res = {}
             solve_res['status'] = res.success
             solve_res['obj_val'] = res.fun
             solve_res['cons_val'] = self.constraint(res.x, cons_params, self.bound)
             solve_res['x'] = res.x
-
-            print(res)
-            print('\n\n')
 
             return solve_res
         else:

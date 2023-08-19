@@ -42,6 +42,8 @@ class Jolteon(Scheduler):
         assert bound_type in ['latency', 'cost'] and bound > 0 and \
             service_level > 0 and service_level < 1
         self.bound_type = bound_type
+        if self.bound_type == 'cost':
+            self.ftol = 1
         self.bound = bound
         self.risk = 1 - service_level
 
@@ -97,6 +99,17 @@ class Jolteon(Scheduler):
             num_vcpus.append(num_vcpu)
         return num_funcs, num_vcpus
 
+    def check_config(self, num_funcs, num_vcpus):
+        # Check if the result satisfies the minimum resource requirement to run the functions
+        # x is a list of the number of functions and vcpus for each stage, aligned with res['x']
+        if self.workflow.workflow_name == 'ML-Pipeline':
+            if num_funcs[1]*num_vcpus[1] < 4:
+                num_funcs[1] = 4
+                num_vcpus[1] = 1
+            if num_funcs[2] > num_funcs[1]:
+                num_funcs[2] = num_funcs[1]
+        
+        return num_funcs, num_vcpus
 
     def search_config(self, param_path=None, sample_path=None, 
                       init_vals=None, x_bound=None, load=True):
@@ -119,9 +132,13 @@ class Jolteon(Scheduler):
         t0 = time.time()
         self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
                                 self.bound, self.obj_params, self.cons_params, 
-                                risk=self.risk, confidence_error=self.confidence_error)
+                                risk=self.risk, confidence_error=self.confidence_error,
+                                ftol=self.ftol)
 
         while True:
+            if self.solver.bound < self.ftol:
+                raise ValueError('The bound is too small')
+            
             res = self.solver.solve(init_vals=init_vals, x_bound=x_bound)
             if res['status']:
                 break
@@ -131,10 +148,10 @@ class Jolteon(Scheduler):
                 if ratio_not_satisfied < self.risk:
                     break
                 else:
-                    if self.bound_type == 'latency':
+                    if self.bound_type == 'latency':  # Force the solver to find a feasible solution
                         self.solver.bound -= 5
                     else:
-                        self.solver.bound -= 10
+                        self.solver.bound -= 20
         t1 = time.time()
         print('Solve time:', t1-t0, 's\n\n')
 
@@ -142,15 +159,15 @@ class Jolteon(Scheduler):
         print(res)
         
         self.num_funcs, self.num_vcpus = self.round_config(res['x'])
+        self.num_funcs, self.num_vcpus = self.check_config(self.num_funcs, self.num_vcpus)
         
         print('num_funcs:', self.num_funcs)
         print('num_vcpus:', self.num_vcpus)
 
-        x = []
-        for i in range(len(self.workflow.stages)):
-            x.append(self.num_funcs[i])
-            x.append(self.num_vcpus[i])
-        print('Final obj:', objective_func(x, self.obj_params))
+        total_vcpu = np.dot(np.array(self.num_funcs), np.array(self.num_vcpus))
+        print('Total vcpu:', total_vcpu)
+        total_parallel = np.sum(np.array(self.num_funcs))
+        print('Total parallel:', total_parallel)
 
     def set_config(self, real=True):
         mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
@@ -523,7 +540,7 @@ class Ditto(Scheduler):
         else:
             raise ValueError('Invalid obj')
         
-    def set_config(self, total_parallelism):
+    def set_config(self, total_parallelism, num_vcpu=1):
         pr = self.parallelism_ratio.copy()
         for idx, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -534,6 +551,8 @@ class Ditto(Scheduler):
         for stage in self.workflow.stages:
             stage.num_func = num_funcs[stage.stage_id]
         self.num_funcs = num_funcs
+        mem_list = [int(num_vcpu*1792) for i in range(len(num_funcs))]
+        self.workflow.update_workflow_config(mem_list, num_funcs)
         
 
 def main():
@@ -588,22 +607,23 @@ def main():
             scheduler.set_confidence(args.confidence)
             scheduler.generate_func_code()
 
+            x_init = 2
             x_bound = [(4, None), (0.5, None)]
             if args.workflow == 'ml':
-                x_bound = [(1, 2), (0.5, 4.05), (8, 32), (0.5, 4.05), (4, 32), (0.5, 4.05), (1, 2), (0.5, 4.05)]
+                # TODO: move to a private function
+                x_init = [1, 2, 8, 2, 8, 2, 1, 2]
+                if args.bound_type == 'cost':
+                    x_init = [1, 2, 24, 2, 8, 2, 1, 2]
+                x_bound = [(1, 2), (0.5, 4.05), (4, 32), (0.5, 4.05), (4, 32), (0.5, 4.05), (1, 2), (0.5, 4.05)]
             elif args.workflow == 'video':
                 x_bound = [(1, 32), (0.5, 3.05)]
             elif args.workflow == 'tpcds':
                 x_bound = [(1, 32), (0.5, 2.05)]
-            
-            x_init = [1, 2, 8, 2, 8, 2, 1, 2]
-            # for i in range(len(x_init)):
-            #     x_init[i] = int((x_bound[i][0] + x_bound[i][1]) / 2)
 
             param_path = wf.metadata_path('params')
             sample_path = wf.metadata_path('samples')
             scheduler.search_config(param_path, sample_path, x_bound=x_bound, init_vals=x_init)
-            scheduler.set_config(False)
+            scheduler.set_config()
         elif args.scheduler == 'orion':
             scheduler = Orion(wf)
             scheduler.comp_ratio()
@@ -636,40 +656,40 @@ def main():
         print('Predict time for workflow:', scheduler.workflow.predict())
         print('Predict cost for workflow:', scheduler.workflow.predict('cost'))
         
-        # wf.init_stage_status()
-        # clear_dir = wf.workflow_name + '/stage'
-        # clear_dir = clear_dir.replace('-', '_')
-        # clear_data(clear_dir)
-        # t0 = time.time()
-        # res = wf.lazy_execute()
-        # t1 = time.time()
-        # print('Time:', t1 - t0)
+        wf.init_stage_status()
+        clear_dir = wf.workflow_name + '/stage'
+        clear_dir = clear_dir.replace('-', '_')
+        clear_data(clear_dir)
+        t0 = time.time()
+        res = wf.lazy_execute()
+        t1 = time.time()
+        print('Time:', t1 - t0)
         # print(res)
-        # infos = []
-        # time_list = []
-        # times_list = []
-        # for ids, r in enumerate(res):
-        #     l = []
-        #     for ids_, result in enumerate(r):
-        #         if ids_ == 0:
-        #             time_list.append(result)
-        #             continue
-        #         info = extract_info_from_log(result[1])
-        #         infos.append(info)
+        infos = []
+        time_list = []
+        times_list = []
+        for ids, r in enumerate(res):
+            l = []
+            for ids_, result in enumerate(r):
+                if ids_ == 0:
+                    time_list.append(result)
+                    continue
+                info = extract_info_from_log(result[1])
+                infos.append(info)
                 
-        #         rd = json.loads(result[0])
-        #         if 'statusCode' not in rd:
-        #             print(rd)
-        #         rd = json.loads(rd['body'])
-        #         l.append(rd['breakdown'])
-        #     times_list.append(l)
-        # cost = 0
-        # for info in infos:
-        #     cost += info['bill']
-        # print('Cost:', cost, '$')
-        # for idx, t in enumerate(time_list):
-        #     print('Stage', idx, 'time:', t)
-        #     print(times_list[idx])
+                rd = json.loads(result[0])
+                if 'statusCode' not in rd:
+                    print(rd)
+                rd = json.loads(rd['body'])
+                l.append(rd['breakdown'])
+            times_list.append(l)
+        cost = 0
+        for info in infos:
+            cost += info['bill']
+        print('Cost:', cost, '$')
+        for idx, t in enumerate(time_list):
+            print('Stage', idx, 'time:', t)
+            print(times_list[idx])
         
         wf.close_pools()
 
@@ -677,30 +697,12 @@ def main():
 if __name__ == '__main__':
     main()
 
-    # Test jolteon
-    # wf = Workflow('ML-pipeline.json', perf_model_type = 0)
-    # wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
-
-    # scheduler = Jolteon(wf)
-    # scheduler.set_bound('latency', 40, 0.95)
-    # t0 = time.time()
-    # param_path, sample_path = scheduler.store_params_and_samples()
-    # t1 = time.time()
-    # print('Sample time:', t1-t0, 's\n\n')
-    # scheduler.generate_func_code()
-    # t0 = time.time()
-    # scheduler.search_config(param_path, sample_path)
-    # t1 = time.time()
-    # print(PCPSolver.sample_size(len(wf.stages), scheduler.risk, 0, scheduler.confidence_error))
-    # print('Search time:', t1-t0, 's\n\n')
-    # scheduler.set_config()
-
     # Test ditto
     # wf = Workflow('ML-pipeline.json', perf_model_type = 2)
     # wf.train_perf_model('/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json')
     # scheduler = Ditto(wf)
     # scheduler.comp_ratio()
-    # scheduler.set_config(32)
+    # scheduler.set_config(40)
     # print(scheduler.parallelism_ratio)
     # print(scheduler.num_funcs)
     

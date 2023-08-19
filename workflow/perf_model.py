@@ -189,9 +189,6 @@ class StagePerfModel:
                 self.compute_params_avg = popt2
                 self.compute_cov_avg = pcov2
 
-            if self.stage_id == 1:
-                print(self.compute_params_avg)
-                print(self.compute_cov_avg)
             # print('Compute')
             # print('d error avg:', err1)
             # print('kd error avg:', err2)
@@ -453,7 +450,7 @@ class StagePerfModel:
     def visualize(self, profile_path) -> None:
         self.__visualize(profile_path)
 
-    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0) -> float:
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=70) -> float:
         # input_size uses MB as unit
         assert num_vcpu > 0 and num_vcpu <= 10
         assert num_func > 0
@@ -475,15 +472,15 @@ class StagePerfModel:
         params = self.params()
         pred = np.dot(params[1:], x)
         if mode == 'latency':
-            pred += params[0]
+            pred += np.percentile(self.cold_params_avg, cold_percent)
             return pred
         else:
             # 1792 / 1024 * 0.0000000167 * 1000
-            pred += params[0]
+            pred += np.percentile(self.cold_params_avg, cold_percent)
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
 
     def params(self):
-        cold_coeff = np.percentile(self.cold_params_avg, 70)
+        cold_coeff = np.percentile(self.cold_params_avg, 60)
         res = np.array([cold_coeff, self.x_coeff, self.kd_d_coeff, self.logx_coeff,
                         self.x2_coeff, self.const_coeff])
         return res
@@ -498,7 +495,6 @@ class StagePerfModel:
         res['cold'] = rng.choice(self.cold_params_avg, num_samples)
         res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
                                               num_samples)
-        print(res['read'].shape)
         res['compute'] = rng.multivariate_normal(self.compute_params_avg, 
                                                  self.compute_cov_avg, 
                                                  num_samples)
