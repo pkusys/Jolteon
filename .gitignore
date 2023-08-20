@@ -195,3 +195,4 @@ TPC-DS/data/*
 samples/*
 params/*
 funcs.py
+orion_config.json

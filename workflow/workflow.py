@@ -640,12 +640,6 @@ class Workflow:
         meta_dir = os.path.join(meta_dir, meta_type + '/')
         if meta_type == 'profiles':
             meta_type = 'profile'
-            # if self.perf_model_type == PerfModel.Distribution.value:
-            #     meta_type = 'profile_dist'
-            # elif self.perf_model_type == PerfModel.Analytical.value:
-            #     meta_type = 'profile_analytic'
-            # elif self.perf_model_type == PerfModel.Jolteon.value:
-            #     meta_type = 'profile_jolteon'
         meta_path = self.workflow_name + '_' + meta_type + '.json'
         meta_path = meta_path.replace('/', '-')
         meta_path = os.path.join(meta_dir, meta_path)
