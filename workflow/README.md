@@ -6,7 +6,7 @@
 -bv: bound_value
 ```
 
-## Jolteon
+## Preprocess
 
 1. Profile
 ```
@@ -20,33 +20,6 @@ python3 -u scheduler.py -w video -p 1 > tmp.log
 python3 -u scheduler.py -w ml -t 1 > tmp1.log
 python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 python3 -u scheduler.py -w video -t 1 > tmp.log
-```
-
-3. Run
-```
-python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 150 > tmp.log
-```
-
-## Orion
-
-1. Run
-```
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 > tmp.log
-```
-
-## Ditto
-
-1. Run
-```
-python3 -u scheduler.py -w ml -s ditto -bt latency > tmp.log
-```
-
-## Caerus
-
-1. Run
-```
-python3 -u scheduler.py -w ml -s caerus > tmp.log
 ```
 
 # Run overall performance (ML-Pipeline)

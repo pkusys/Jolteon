@@ -128,6 +128,9 @@ class PCPSolver:
             return solve_res
         else:
             raise NotImplementedError
+
+    def probe(self):
+        pass
     
     '''
     The generic constraint satisfaction is deprecated due to the nondeterministic behavior of
@@ -140,12 +143,3 @@ class PCPSolver:
             num_samples == param_samples.shape[0]
         num_satisfied = np.sum(np.where(self.constraint(param_samples, x) <= self.bound, 1, 0))
         return num_satisfied - num_samples * (1 - self.approx_risk)
-
-
-# if __name__ == "__main__":
-#     risk = 0.05
-#     approx_risk = 0.0
-#     confidence_error = 0.001
-#     search_space_size = (4 * 6)**4
-#     num_samples = math.ceil(0.5 / (risk - approx_risk)**2 * math.log(search_space_size / confidence_error))
-#     print(num_samples)

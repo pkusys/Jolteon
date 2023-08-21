@@ -88,10 +88,14 @@ class Jolteon(Scheduler):
         return param_path, sample_path
     
     def get_params_and_samples(self):
+        t0 = time.time()
         self.obj_params = self.workflow.get_params()
         num_samples = PCPSolver.sample_size(len(self.workflow.stages), self.risk, 0, 
                                             self.confidence_error)
         self.cons_params = self.workflow.sample_online(num_samples)
+        t1 = time.time()
+        print('Sample size:', num_samples)
+        print('Sample time:', t1-t0, 's\n')
 
     # Generate the objective and constraint functions code at './funcs.py'
     def generate_func_code(self, func_path='./funcs.py'):
@@ -130,7 +134,7 @@ class Jolteon(Scheduler):
         return num_funcs, num_vcpus
 
     def search_config(self, param_path=None, sample_path=None, 
-                      init_vals=None, x_bound=None, load=True):
+                      init_vals=None, x_bound=None, load=False):
         # Assume the functions have been generated
         from funcs import objective_func, constraint_func
         if self.workflow.secondary_path is not None:
@@ -142,10 +146,10 @@ class Jolteon(Scheduler):
             self.obj_params = self.workflow.load_params(param_path)
             num_samples = PCPSolver.sample_size(len(self.workflow.stages), self.risk, 0, 
                                                 self.confidence_error)
-            print('Sample size:', num_samples)
+            print('Sample size:', num_samples, '\n')
             self.cons_params = self.workflow.load_samples(sample_path, num_samples)
             t1 = time.time()
-            print('Load time:', t1-t0, 's\n\n')
+            print('Load time:', t1-t0, 's\n')
 
         t0 = time.time()
         self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
@@ -171,9 +175,9 @@ class Jolteon(Scheduler):
                     else:
                         self.solver.bound -= 20
         t1 = time.time()
-        print('Solve time:', t1-t0, 's\n\n')
+        print('Solve time:', t1-t0, 's\n')
 
-        print('Final bound:', self.solver.bound)
+        # print('Final bound:', self.solver.bound)
         print(res)
         
         self.num_funcs, self.num_vcpus = self.round_config(res['x'])
@@ -186,6 +190,7 @@ class Jolteon(Scheduler):
         print('Total vcpu:', total_vcpu)
         total_parallel = np.sum(np.array(self.num_funcs))
         print('Total parallel:', total_parallel)
+        print()
 
     def set_config(self, real=True):
         mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
@@ -289,7 +294,6 @@ class Orion(Caerus):
                 
                 dist = self.get_distribution(new_val)
                 print(self.num_funcs, new_val, dist.probility(latency))
-                # print('\n\n')
                 if dist.probility(latency) >= confidence:
                     return new_val
 
@@ -645,7 +649,6 @@ def main():
         wf.train_perf_model(wf.metadata_path('profiles'))
         if args.scheduler == 'jolteon':
             scheduler = Jolteon(wf)
-            scheduler.store_params_and_samples()
             scheduler.set_bound(args.bound_type, args.bound_value, args.service_level)
             scheduler.set_confidence(args.confidence)
             scheduler.generate_func_code()
@@ -653,7 +656,6 @@ def main():
             x_init = 2
             x_bound = [(4, None), (0.5, None)]
             if args.workflow == 'ml':
-                # TODO: move to a private function
                 x_init = [1, 2, 8, 2, 8, 2, 1, 2]
                 if args.bound_type == 'cost':
                     x_init = [1, 2, 24, 2, 8, 2, 1, 2]
@@ -663,12 +665,20 @@ def main():
             elif args.workflow == 'tpcds':
                 x_bound = [(1, 32), (0.5, 2.05)]
 
-            param_path = wf.metadata_path('params')
-            sample_path = wf.metadata_path('samples')
-            scheduler.search_config(param_path, sample_path, x_bound=x_bound, init_vals=x_init)
-            scheduler.set_config()
+            # scheduler.store_params_and_samples()
+            # param_path = wf.metadata_path('params')
+            # sample_path = wf.metadata_path('samples')
+            scheduler.get_params_and_samples()
+            t0 = time.time()
+            scheduler.search_config(x_bound=x_bound, init_vals=x_init)
+            t1 = time.time()
+            print('Search time:', t1-t0, 's\n')
+            t0 = time.time()
+            scheduler.set_config(False)
+            t1 = time.time()
+            print('Set config time:', t1-t0, 's\n')
 
-            print('\n\n')
+            print('\n')
             for stage in scheduler.workflow.stages:
                 parent_d = 0
                 if not stage.allow_parallel:
@@ -683,7 +693,7 @@ def main():
                     stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
                                             num_func=scheduler.num_funcs[stage.stage_id],
                                             parent_d=parent_d, mode='cost'))
-            print('\n\n')
+            print('\n')
             print('Predict time for workflow:', scheduler.workflow.predict())
             print('Predict cost for workflow:', scheduler.workflow.predict('cost'))
         
@@ -714,40 +724,40 @@ def main():
             print(scheduler.parallelism_ratio)
             print(scheduler.num_funcs)
         
-        wf.init_stage_status()
-        clear_dir = wf.workflow_name + '/stage'
-        clear_dir = clear_dir.replace('-', '_')
-        clear_data(clear_dir)
-        t0 = time.time()
-        res = wf.lazy_execute()
-        t1 = time.time()
-        print('Time:', t1 - t0)
-        # print(res)
-        infos = []
-        time_list = []
-        times_list = []
-        for ids, r in enumerate(res):
-            l = []
-            for ids_, result in enumerate(r):
-                if ids_ == 0:
-                    time_list.append(result)
-                    continue
-                info = extract_info_from_log(result[1])
-                infos.append(info)
+        # wf.init_stage_status()
+        # clear_dir = wf.workflow_name + '/stage'
+        # clear_dir = clear_dir.replace('-', '_')
+        # clear_data(clear_dir)
+        # t0 = time.time()
+        # res = wf.lazy_execute()
+        # t1 = time.time()
+        # print('Time:', t1 - t0)
+        # # print(res)
+        # infos = []
+        # time_list = []
+        # times_list = []
+        # for ids, r in enumerate(res):
+        #     l = []
+        #     for ids_, result in enumerate(r):
+        #         if ids_ == 0:
+        #             time_list.append(result)
+        #             continue
+        #         info = extract_info_from_log(result[1])
+        #         infos.append(info)
                 
-                rd = json.loads(result[0])
-                if 'statusCode' not in rd:
-                    print(rd)
-                rd = json.loads(rd['body'])
-                l.append(rd['breakdown'])
-            times_list.append(l)
-        cost = 0
-        for info in infos:
-            cost += info['bill']
-        print('Cost:', cost, '$')
-        for idx, t in enumerate(time_list):
-            print('Stage', idx, 'time:', t)
-            print(times_list[idx])
+        #         rd = json.loads(result[0])
+        #         if 'statusCode' not in rd:
+        #             print(rd)
+        #         rd = json.loads(rd['body'])
+        #         l.append(rd['breakdown'])
+        #     times_list.append(l)
+        # cost = 0
+        # for info in infos:
+        #     cost += info['bill']
+        # print('Cost:', cost, '$')
+        # for idx, t in enumerate(time_list):
+        #     print('Stage', idx, 'time:', t)
+        #     print(times_list[idx])
         
         wf.close_pools()
 
