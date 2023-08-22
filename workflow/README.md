@@ -27,6 +27,7 @@ python3 -u scheduler.py -w video -t 1 > tmp.log
 Latency bound
 Run each command for 6 times and take the last 5 results to eliminate the cold start effect.
 ```
+python3 -u scheduler.py -w ml -bt latency -bv 18 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 25 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
@@ -38,6 +39,7 @@ python3 -u scheduler.py -w ml -bt latency -bv 500 > tmp.log
 Cost bound
 Run each command for 6 times and take the last 5 results
 ```
+python3 -u scheduler.py -w ml -bt cost -bv 700 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 800 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 900 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 1000 > tmp.log

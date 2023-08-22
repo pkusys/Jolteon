@@ -4,9 +4,7 @@ import numpy as np
 import scipy.optimize as scipy_opt
 from scipy.optimize import NonlinearConstraint
 from deprecation import deprecated
-# import pyomo.environ as pyo
-# from pyomo.environ import *
-# from pyomo.opt import SolverFactory
+from .basic_class import MyQueue
 
 '''
 PCP: Probabilistic (Chance) Constrained Programming
@@ -14,12 +12,14 @@ The PCPSolver uses the sample approximation approach to solve the PCP problem as
 the paper "A Sample Approximation Approach for Optimization with Probabilistic Constraints".
 '''
 class PCPSolver:
-    def __init__(self, num_X, objective, constraint,
-                 bound, obj_params, cons_params, 
+    def __init__(self, num_X, objective, constraint, bound, 
+                 obj_params, cons_params, 
                  constraint_2=None,
                  risk=0.05, approx_risk=0, confidence_error=0.001, 
                  ftol=1, 
-                 solver_info={'optlib': 'scipy', 'method': 'SLSQP'}) -> None:
+                 k_configs=[0.5, 1, 1.5, 2, 2.5, 3, 4],
+                 d_configs=[1, 4, 8, 16, 32],
+                 solver_info={'optlib': 'scipy', 'method': 'SLSQP'}):
         assert isinstance(num_X, int) and num_X > 0
         assert callable(objective) and callable(constraint)
         if constraint_2 is not None:
@@ -54,15 +54,20 @@ class PCPSolver:
         # depending on the relationship between epsilon and alpha, default to 0.01
         self.confidence_error = confidence_error
 
+        # Used for solving
         self.ftol = ftol
+        # Used for probing
+        self.k_configs = k_configs
+        self.d_configs = d_configs
+
         # Solver information for the sample approximation problem
         self.solver_info = solver_info
 
     @staticmethod
     def sample_size(num_stages, risk, approx_risk, confidence_error) -> int:
-        # {1024, 1792, 2048, 4096} as the intra-function resource space, so the size if 4
-        # {1, 2, 4, 8, 16, 32} as the parallelism space, so the size is 6
-        search_space_size = (4 * 6)**(num_stages // 2)  # num_X / 2 stages
+        # {0.5, 1, 1.5, 2, 3, 4} as the intra-function resource space, so the size is 8
+        # {4, 8, 16, 32} as the parallelism space, so the size is 4
+        search_space_size = (7 * 4)**(num_stages // 2)  # num_X / 2 stages
         min_abs_tol = 1e-2
         if math.isclose(risk, approx_risk, abs_tol=min_abs_tol):
             return math.ceil(0.5 / min_abs_tol**2 * math.log((1 + search_space_size) / confidence_error))
@@ -80,57 +85,217 @@ class PCPSolver:
             the constraint values, and the optimal solution
     '''
     def solve(self, init_vals=None, x_bound=None) -> dict:
-        if self.solver_info['optlib'] == 'scipy':
-            assert self.solver_info['method'] == 'SLSQP'
+        assert self.solver_info['optlib'] == 'scipy'
+        assert self.solver_info['method'] == 'SLSQP'
             
-            x0 = np.ones(self.num_X) * 2  # initial guess
-            if init_vals is not None:
-                if isinstance(init_vals, int) or isinstance(init_vals, float):
-                    x0 = np.ones(self.num_X) * init_vals
-                elif isinstance(init_vals, list) and len(init_vals) == self.num_X:
-                    # ssert all(isinstaance(x, int) or isinstance(x, float) for x in init_vals)
-                    x0 = np.array(init_vals)
-                elif isinstance(init_vals, np.ndarray) and init_vals.shape == (self.num_X, ):
-                    x0 = init_vals
+        x0 = np.ones(self.num_X) * 2  # initial guess
+        if init_vals is not None:
+            if isinstance(init_vals, int) or isinstance(init_vals, float):
+                x0 = np.ones(self.num_X) * init_vals
+            elif isinstance(init_vals, list) and len(init_vals) == self.num_X:
+                # ssert all(isinstaance(x, int) or isinstance(x, float) for x in init_vals)
+                x0 = np.array(init_vals)
+            elif isinstance(init_vals, np.ndarray) and init_vals.shape == (self.num_X, ):
+                x0 = init_vals
 
-            X_bounds = [(0.5, None) for _ in range(self.num_X)] # optional bounds for each x
-            if x_bound is not None:
-                if isinstance(x_bound, tuple) and len(x_bound) == 2:
-                    X_bounds = [x_bound for _ in range(self.num_X)]
-                elif isinstance(x_bound, list) and len(x_bound) == self.num_X:
-                    X_bounds = x_bound
-                elif isinstance(x_bound, list) and len(x_bound) == 2:
-                    # [0] is for parallelism, [1] is for intra-function resource
-                    X_bounds = []
-                    for _ in range(self.num_X // 2):
-                        X_bounds.append(x_bound[0])
-                        X_bounds.append(x_bound[1])
+        X_bounds = [(0.5, None) for _ in range(self.num_X)] # optional bounds for each x
+        if x_bound is not None:
+            if isinstance(x_bound, tuple) and len(x_bound) == 2:
+                X_bounds = [x_bound for _ in range(self.num_X)]
+            elif isinstance(x_bound, list) and len(x_bound) == self.num_X:
+                X_bounds = x_bound
+            elif isinstance(x_bound, list) and len(x_bound) == 2:
+                # [0] is for parallelism, [1] is for intra-function resource
+                X_bounds = []
+                for _ in range(self.num_X // 2):
+                    X_bounds.append(x_bound[0])
+                    X_bounds.append(x_bound[1])
 
-            obj_params = np.array(self.obj_params)
-            cons_params = np.array(self.cons_params).T
-            nonlinear_constraints = NonlinearConstraint(lambda x: self.constraint(x, cons_params, self.bound), -np.inf, 0)
-            if self.constraint_2 is not None:
-                nonlinear_constraints_2 = NonlinearConstraint(lambda x: self.constraint_2(x, obj_params), -np.inf, 0)
-                nonlinear_constraints = [nonlinear_constraints, nonlinear_constraints_2]
-            
-            res = scipy_opt.minimize(lambda x: self.objective(x, obj_params), x0, 
-                                     method=self.solver_info['method'],
-                                     bounds=X_bounds, 
-                                     constraints=nonlinear_constraints,
-                                     options={'ftol': self.ftol, 'disp': False})
-            
-            solve_res = {}
-            solve_res['status'] = res.success
-            solve_res['obj_val'] = res.fun
-            solve_res['cons_val'] = self.constraint(res.x, cons_params, self.bound)
-            solve_res['x'] = res.x
+        obj_params = np.array(self.obj_params)
+        cons_params = np.array(self.cons_params).T
+        nonlinear_constraints = NonlinearConstraint(lambda x: self.constraint(x, cons_params, self.bound), -np.inf, 0)
+        if self.constraint_2 is not None:
+            nonlinear_constraints_2 = NonlinearConstraint(lambda x: self.constraint_2(x, obj_params), -np.inf, 0)
+            nonlinear_constraints = [nonlinear_constraints, nonlinear_constraints_2]
+        
+        res = scipy_opt.minimize(lambda x: self.objective(x, obj_params), x0, 
+                                    method=self.solver_info['method'],
+                                    bounds=X_bounds, 
+                                    constraints=nonlinear_constraints,
+                                    options={'ftol': self.ftol, 'disp': False})
+        
+        solve_res = {}
+        solve_res['status'] = res.success
+        solve_res['obj_val'] = res.fun
+        solve_res['cons_val'] = self.constraint(res.x, cons_params, self.bound)
+        solve_res['x'] = res.x
 
-            return solve_res
-        else:
-            raise NotImplementedError
+        return solve_res
 
-    def probe(self):
-        pass
+    '''
+    Solve the sample approximation problem iteratively to tolerate a certain number of 
+    constraint violations
+    '''
+    def iter_solve(self, init_vals=None, x_bound=None, bound_type='latency'):
+        while True:
+            res = self.solve(init_vals=init_vals, x_bound=x_bound)
+            if res['status']:
+                break
+            else:
+                cons_val = np.array(res['cons_val'])
+                ratio_not_satisfied = np.sum(cons_val > self.ftol) / len(cons_val)
+                if ratio_not_satisfied < self.risk:
+                    break
+                else:
+                    print('bound:', self.bound, 'ratio:', ratio_not_satisfied)
+                    self.bound += self.ftol * 2
+
+        return res
+
+    def probe(self, d_init, k_init):
+        # assume init is within the feasible region
+        d_pos = []
+        k_pos = []
+        d_config = np.array(self.d_configs)
+        k_config = np.array(self.k_configs)
+        for d in d_init:
+            mask = (d_config == d)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                d_pos.append(j)
+        for k in k_init:
+            mask = (k_config == k)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                k_pos.append(j)
+        
+        d_pos = np.array(d_pos)
+        k_pos = np.array(k_pos)
+        x_pos = np.zeros(self.num_X, dtype=int)
+        x_pos[0::2] = d_pos
+        x_pos[1::2] = k_pos
+
+        # def grid_search(x_pos):
+        #     step_k = [i - len(k_config) // 2 for i in range(len(k_config))]
+        #     step_d = [i - len(d_config) // 2 for i in range(len(d_config))]
+        #     best_pos = x_pos.copy()
+        #     best_obj = self.objective(x, self.obj_params)
+        #     best_cons = self.constraint(x, self.obj_params, self.bound)
+        #     print('x:', x)
+        #     print('obj:', best_obj)
+        #     print('cons:', best_cons)
+        #     print()
+        #     for k in range(0, self.num_X):
+        #         if k % 2 == 0:  # d
+        #             step = step_d
+        #             config = d_config
+        #         else:  # k
+        #             step = step_k
+        #             config = k_config
+        #         for i in range(len(step)):
+        #             new_x_pos = x_pos.copy()
+        #             new_x_pos[k] += step[i]
+        #             if new_x_pos[k] < 0 or new_x_pos[k] >= len(config) or (k % 2 == 0 and new_x_pos[k] == 0):
+        #                 continue
+        #             new_x = np.zeros(self.num_X)
+        #             new_x[0::2] = d_config[new_x_pos[0::2]]
+        #             new_x[1::2] = k_config[new_x_pos[1::2]]
+                    
+        #             obj_val = self.objective(new_x, self.obj_params)
+        #             cons_val = self.constraint(new_x, self.obj_params, self.bound)
+
+        #             if best_cons < self.ftol:
+        #                 if cons_val < self.ftol and cons_val > best_cons and obj_val < best_obj:
+        #                     best_pos = new_x_pos.copy()
+        #                     best_obj = obj_val
+        #                     best_cons = cons_val
+        #             else:  # find a feasible solution first
+        #                 if cons_val < best_cons:
+        #                     best_pos = new_x_pos.copy()
+        #                     best_obj = obj_val
+        #                     best_cons = cons_val
+        #     return best_pos
+
+        searched = set()
+
+        def bfs(x_pos, max_depth=6):
+            q = MyQueue()
+            searched.add(tuple(x_pos))
+            q.push([x_pos, 0])
+
+            best_pos = x_pos.copy()
+            best_x = np.zeros(self.num_X)
+            best_x[0::2] = d_config[best_pos[0::2]]
+            best_x[1::2] = k_config[best_pos[1::2]]
+            best_obj = self.objective(best_x, self.obj_params)
+            best_cons = self.constraint(best_x, self.obj_params, self.bound)
+
+            steps = [-1, 1]
+
+            while len(q) > 0:
+                p = q.pop()
+
+                x = np.zeros(self.num_X)
+                x[0::2] = d_config[p[0][0::2]]
+                x[1::2] = k_config[p[0][1::2]]
+                cons = self.constraint(x, self.obj_params, self.bound)
+                obj = self.objective(x, self.obj_params)
+                # print('x:', x, 'obj:', obj, 'cons:', cons)
+
+                if best_cons < 0:  # tight bound
+                    if cons < 0 and cons > best_cons and obj < best_obj:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+                else:  # find a feasible solution first
+                    if cons < best_cons:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+
+                if p[1] < max_depth:
+                    for t in range(self.num_X):
+                        if t % 2 == 0:  # d
+                            config = d_config
+                        else:  # k
+                            config = k_config
+                        for s in steps:
+                            new_x_pos = p[0].copy()
+                            new_x_pos[t] += s
+                            if new_x_pos[t] < 0 or new_x_pos[t] >= len(config) or (t % 2 == 0 and new_x_pos[t] == 0):
+                                continue
+                            if tuple(new_x_pos) in searched:
+                                continue
+                            searched.add(tuple(new_x_pos))
+                            q.push([new_x_pos, p[1] + 1])
+
+            return best_pos
+
+        x = np.zeros(self.num_X)
+        x[0::2] = d_config[x_pos[0::2]]
+        x[1::2] = k_config[x_pos[1::2]]
+        cons = self.constraint(x, self.obj_params, self.bound)
+        feasible = cons < 0
+        while not feasible:  # find a feasible solution first
+            x_pos = bfs(x_pos)
+            x = np.zeros(self.num_X)
+            x[0::2] = d_config[x_pos[0::2]]
+            x[1::2] = k_config[x_pos[1::2]]
+            cons = self.constraint(x, self.obj_params, self.bound)
+            print('x:', x, 'cons:', cons, 'ftol:', self.ftol)
+            feasible = cons < 0
+        
+        # find the best solution
+        best_pos = bfs(x_pos)
+        # best_x = np.zeros(self.num_X)
+        # best_x[0::2] = d_config[best_pos[0::2]]
+        # best_x[1::2] = k_config[best_pos[1::2]]
+        # best_obj = self.objective(best_x, self.obj_params)
+        # best_cons = self.constraint(best_x, self.obj_params, self.bound)
+        best_d = d_config[best_pos[0::2]].tolist()
+        best_k = k_config[best_pos[1::2]].tolist()
+
+        return best_d, best_k
     
     '''
     The generic constraint satisfaction is deprecated due to the nondeterministic behavior of

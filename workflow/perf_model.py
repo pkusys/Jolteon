@@ -357,7 +357,7 @@ class StagePerfModel:
         
         print()
 
-    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=70) -> float:
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=60) -> float:
         # input_size uses MB as unit
         assert num_vcpu > 0 and num_vcpu <= 10
         assert num_func > 0
@@ -386,8 +386,8 @@ class StagePerfModel:
             pred += np.percentile(self.cold_params_avg, cold_percent)
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
 
-    def params(self):
-        cold_coeff = np.percentile(self.cold_params_avg, 60)
+    def params(self, cold_percent=60):
+        cold_coeff = np.percentile(self.cold_params_avg, cold_percent)
         res = np.array([cold_coeff, self.x_coeff, self.kd_d_coeff, self.logx_coeff,
                         self.x2_coeff, self.const_coeff])
         return res
@@ -491,7 +491,7 @@ class StagePerfModel:
             # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225 
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
-            s = cold_param + ' + ' + s
+            s = cold_param + ' / 2 + ' + s
             s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
         return s
 

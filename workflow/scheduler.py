@@ -30,6 +30,10 @@ class Scheduler(ABC):
             for i in range(4):
                 if num_vcpus[i] < 1024 / 1792:
                     num_vcpus[i] = 1024 / 1792
+
+        for i, stage in enumerate(self.workflow.stages):
+            if stage.allow_parallel is False:
+                num_funcs[i] = 1
         
         return num_funcs, num_vcpus
 
@@ -50,7 +54,8 @@ class Scheduler(ABC):
         return new_num_funcs
 
 class Jolteon(Scheduler):
-    def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000, ftol=1):
+    def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000, ftol=1, 
+                 vcpu_configs=[0.6, 1, 1.5, 2, 2.5, 3, 4], parallel_configs=[1, 4, 8, 16, 32]):
         super().__init__(workflow)
         self.storage_mode = storage_mode
         self.num_funcs = []
@@ -66,16 +71,17 @@ class Jolteon(Scheduler):
         self.obj_params = None
         self.cons_params = None
         self.ftol = ftol
+        self.vcpu_configs = vcpu_configs
+        self.parallel_configs = parallel_configs
 
     def set_bound(self, bound_type, bound, service_level):
         # service_level is the probability that the latencty or cost is less than the bound
         assert bound_type in ['latency', 'cost'] and bound > 0 and \
             service_level > 0 and service_level < 1
         self.bound_type = bound_type
-        if self.bound_type == 'cost':
-            self.ftol = 1
         self.bound = bound
         self.risk = 1 - service_level
+        self.ftol = self.risk * self.bound 
 
     def set_confidence(self, confidence):
         # confidence is the probability that the bounded performance is guaranteed
@@ -110,25 +116,25 @@ class Jolteon(Scheduler):
         num_funcs = []
         num_vcpus = []
         for i, stage in enumerate(self.workflow.stages):
-            num_func = int(x[2*i])
+            num_func = x[2*i]
             # input stages round up to the nearest 2^n
-            if self.workflow.workflow_name == 'ML-Pipeline' and stage.stage_id == 1:
-                if num_func < 1:
-                    num_func = 1
-                else:
-                    num_func = 2 ** math.ceil(math.log(num_func, 2))
+            for p in self.parallel_configs:
+                if num_func <= p:
+                    num_func = p
+                    break
+            if num_func > self.parallel_configs[-1]:
+                num_func = self.parallel_configs[-1]
+
             if stage.allow_parallel is False:
                 num_func = 1
             
             num_vcpu = x[2*i+1]
-            if num_vcpu < 1:
-                threshold = 1024 / 1792
-                if num_vcpu > threshold:
-                    num_vcpu = round(num_vcpu, 1)
-                else:
-                    num_vcpu = threshold
-            else:
-                num_vcpu = round(num_vcpu, 1)
+            for v in self.vcpu_configs:
+                if num_vcpu < v:
+                    num_vcpu = v
+                    break
+            if num_vcpu > self.vcpu_configs[-1]:
+                num_vcpu = self.vcpu_configs[-1]
             num_funcs.append(num_func)
             num_vcpus.append(num_vcpu)
         return num_funcs, num_vcpus
@@ -155,32 +161,22 @@ class Jolteon(Scheduler):
         self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
                                 self.bound, self.obj_params, self.cons_params, 
                                 risk=self.risk, confidence_error=self.confidence_error,
-                                ftol=self.ftol)
-
-        while True:
-            if self.solver.bound < self.ftol:
-                raise ValueError('The bound is too small')
-            
-            res = self.solver.solve(init_vals=init_vals, x_bound=x_bound)
-            if res['status']:
-                break
-            else:
-                cons_val = np.array(res['cons_val'])
-                ratio_not_satisfied = np.sum(cons_val > self.ftol) / len(cons_val)
-                if ratio_not_satisfied < self.risk:
-                    break
-                else:
-                    if self.bound_type == 'latency':  # Force the solver to find a feasible solution
-                        self.solver.bound -= 5
-                    else:
-                        self.solver.bound -= 20
+                                ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs)
+        res = self.solver.iter_solve(init_vals, x_bound, self.bound_type)
         t1 = time.time()
+        print('Final bound:', self.solver.bound)
+        print(res)
         print('Solve time:', t1-t0, 's\n')
 
-        # print('Final bound:', self.solver.bound)
-        print(res)
+        self.solver.bound = self.bound
         
         self.num_funcs, self.num_vcpus = self.round_config(res['x'])
+
+        t0 = time.time()
+        self.num_funcs, self.num_vcpus = self.solver.probe(self.num_funcs, self.num_vcpus)
+        t1 = time.time()
+        print('Probe time:', t1-t0, 's\n')
+
         self.num_funcs, self.num_vcpus = self.check_config(self.num_funcs, self.num_vcpus)
         
         print('num_funcs:', self.num_funcs)
@@ -657,9 +653,7 @@ def main():
             x_bound = [(4, None), (0.5, None)]
             if args.workflow == 'ml':
                 x_init = [1, 2, 8, 2, 8, 2, 1, 2]
-                if args.bound_type == 'cost':
-                    x_init = [1, 2, 24, 2, 8, 2, 1, 2]
-                x_bound = [(1, 2), (0.5, 4.05), (4, 32), (0.5, 4.05), (4, 32), (0.5, 4.05), (1, 2), (0.5, 4.05)]
+                x_bound = [(1, 2), (0.5, 4.1), (4, 32), (0.5, 4.1), (4, 32), (0.5, 4.1), (1, 2), (0.5, 4.1)]
             elif args.workflow == 'video':
                 x_bound = [(1, 32), (0.5, 3.05)]
             elif args.workflow == 'tpcds':
@@ -673,27 +667,23 @@ def main():
             scheduler.search_config(x_bound=x_bound, init_vals=x_init)
             t1 = time.time()
             print('Search time:', t1-t0, 's\n')
-            t0 = time.time()
             scheduler.set_config(False)
-            t1 = time.time()
-            print('Set config time:', t1-t0, 's\n')
 
-            print('\n')
-            for stage in scheduler.workflow.stages:
-                parent_d = 0
-                if not stage.allow_parallel:
-                    for i in range(len(stage.parents)-1, -1, -1):
-                        if stage.parents[i].allow_parallel:
-                            parent_d = stage.parents[i].num_func
-                            break
-                print('Predict for stage', stage.stage_id, ':', 
-                    stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
-                                            num_func=scheduler.num_funcs[stage.stage_id],
-                                            parent_d=parent_d), 
-                    stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
-                                            num_func=scheduler.num_funcs[stage.stage_id],
-                                            parent_d=parent_d, mode='cost'))
-            print('\n')
+            # for stage in scheduler.workflow.stages:
+            #     parent_d = 0
+            #     if not stage.allow_parallel:
+            #         for i in range(len(stage.parents)-1, -1, -1):
+            #             if stage.parents[i].allow_parallel:
+            #                 parent_d = stage.parents[i].num_func
+            #                 break
+            #     print('Predict for stage', stage.stage_id, ':', 
+            #         stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
+            #                                 num_func=scheduler.num_funcs[stage.stage_id],
+            #                                 parent_d=parent_d), 
+            #         stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
+            #                                 num_func=scheduler.num_funcs[stage.stage_id],
+            #                                 parent_d=parent_d, mode='cost'))
+            print()
             print('Predict time for workflow:', scheduler.workflow.predict())
             print('Predict cost for workflow:', scheduler.workflow.predict('cost'))
         
