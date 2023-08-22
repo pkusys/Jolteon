@@ -548,7 +548,7 @@ class Workflow:
                 cost += stage.perf_model.predict(stage.config['memory']/1792,
                                                  stage.num_func, mode,
                                                  parent_d=parent_d,
-                                                 cold_percent=20)
+                                                 cold_percent=0)
             return cost
 
     def store_params(self):

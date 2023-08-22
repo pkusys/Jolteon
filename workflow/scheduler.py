@@ -161,8 +161,9 @@ class Jolteon(Scheduler):
         self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
                                 self.bound, self.obj_params, self.cons_params, 
                                 risk=self.risk, confidence_error=self.confidence_error,
-                                ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs)
-        res = self.solver.iter_solve(init_vals, x_bound, self.bound_type)
+                                ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
+                                bound_type=self.bound_type)
+        res = self.solver.iter_solve(init_vals, x_bound)
         t1 = time.time()
         print('Final bound:', self.solver.bound)
         print(res)
@@ -186,6 +187,11 @@ class Jolteon(Scheduler):
         print('Total vcpu:', total_vcpu)
         total_parallel = np.sum(np.array(self.num_funcs))
         print('Total parallel:', total_parallel)
+        print()
+
+        lat, cost = self.solver.get_vals(self.num_funcs, self.num_vcpus)
+        print('Predicted latency:', lat)
+        print('Predicted cost:', cost)
         print()
 
     def set_config(self, real=True):
@@ -652,7 +658,7 @@ def main():
             x_init = 2
             x_bound = [(4, None), (0.5, None)]
             if args.workflow == 'ml':
-                x_init = [1, 2, 8, 2, 8, 2, 1, 2]
+                x_init = [1, 3, 16, 3, 8, 3, 1, 3]
                 x_bound = [(1, 2), (0.5, 4.1), (4, 32), (0.5, 4.1), (4, 32), (0.5, 4.1), (1, 2), (0.5, 4.1)]
             elif args.workflow == 'video':
                 x_bound = [(1, 32), (0.5, 3.05)]
@@ -667,25 +673,7 @@ def main():
             scheduler.search_config(x_bound=x_bound, init_vals=x_init)
             t1 = time.time()
             print('Search time:', t1-t0, 's\n')
-            scheduler.set_config(False)
-
-            # for stage in scheduler.workflow.stages:
-            #     parent_d = 0
-            #     if not stage.allow_parallel:
-            #         for i in range(len(stage.parents)-1, -1, -1):
-            #             if stage.parents[i].allow_parallel:
-            #                 parent_d = stage.parents[i].num_func
-            #                 break
-            #     print('Predict for stage', stage.stage_id, ':', 
-            #         stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
-            #                                 num_func=scheduler.num_funcs[stage.stage_id],
-            #                                 parent_d=parent_d), 
-            #         stage.perf_model.predict(num_vcpu=scheduler.num_vcpus[stage.stage_id],
-            #                                 num_func=scheduler.num_funcs[stage.stage_id],
-            #                                 parent_d=parent_d, mode='cost'))
-            print()
-            print('Predict time for workflow:', scheduler.workflow.predict())
-            print('Predict cost for workflow:', scheduler.workflow.predict('cost'))
+            scheduler.set_config()
         
         elif args.scheduler == 'orion':
             scheduler = Orion(wf)

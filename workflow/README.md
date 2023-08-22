@@ -32,8 +32,11 @@ python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 25 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 50 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 60 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 70 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 500 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 100 > tmp.log
 ```
 
 Cost bound
@@ -43,10 +46,11 @@ python3 -u scheduler.py -w ml -bt cost -bv 700 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 800 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 900 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 1000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1300 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 1600 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 2000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 2500 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 3000 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 5000 > tmp.log
 ```
 
 Ditto
@@ -76,9 +80,6 @@ python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 -tp 40 -f 1 > tmp.log
 
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 -f 1 > tmp.log
-
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 60 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 60 -tp 40 -f 1 > tmp.log
 
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 -f 1 > tmp.log

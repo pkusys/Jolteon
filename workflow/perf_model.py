@@ -383,7 +383,7 @@ class StagePerfModel:
             return pred
         else:
             # 1792 / 1024 * 0.0000000167 * 1000
-            pred += np.percentile(self.cold_params_avg, cold_percent)
+            # pred += np.percentile(self.cold_params_avg, cold_percent)
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
 
     def params(self, cold_percent=60):
@@ -491,7 +491,7 @@ class StagePerfModel:
             # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225 
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
-            s = cold_param + ' / 2 + ' + s
+            # s = cold_param + ' / 2 + ' + s
             s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
         return s
 

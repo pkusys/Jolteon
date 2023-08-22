@@ -19,6 +19,7 @@ class PCPSolver:
                  ftol=1, 
                  k_configs=[0.5, 1, 1.5, 2, 2.5, 3, 4],
                  d_configs=[1, 4, 8, 16, 32],
+                 bound_type='latency',
                  solver_info={'optlib': 'scipy', 'method': 'SLSQP'}):
         assert isinstance(num_X, int) and num_X > 0
         assert callable(objective) and callable(constraint)
@@ -59,6 +60,8 @@ class PCPSolver:
         # Used for probing
         self.k_configs = k_configs
         self.d_configs = d_configs
+
+        self.bound_type = bound_type
 
         # Solver information for the sample approximation problem
         self.solver_info = solver_info
@@ -136,7 +139,7 @@ class PCPSolver:
     Solve the sample approximation problem iteratively to tolerate a certain number of 
     constraint violations
     '''
-    def iter_solve(self, init_vals=None, x_bound=None, bound_type='latency'):
+    def iter_solve(self, init_vals=None, x_bound=None):
         while True:
             res = self.solve(init_vals=init_vals, x_bound=x_bound)
             if res['status']:
@@ -148,7 +151,7 @@ class PCPSolver:
                     break
                 else:
                     print('bound:', self.bound, 'ratio:', ratio_not_satisfied)
-                    self.bound += self.ftol * 2
+                    self.bound += self.ftol * 4
 
         return res
 
@@ -175,9 +178,11 @@ class PCPSolver:
         x_pos[0::2] = d_pos
         x_pos[1::2] = k_pos
 
+        cons_params = np.array(self.cons_params).T
+
         searched = set()
 
-        def bfs(x_pos, max_depth=6):
+        def bfs(x_pos, max_depth=4):
             q = MyQueue()
             searched.add(tuple(x_pos))
             q.push([x_pos, 0])
@@ -197,7 +202,8 @@ class PCPSolver:
                 x = np.zeros(self.num_X)
                 x[0::2] = d_config[p[0][0::2]]
                 x[1::2] = k_config[p[0][1::2]]
-                cons = self.constraint(x, self.obj_params, self.bound)
+                cons = self.constraint(x, cons_params, self.bound)
+                cons = np.percentile(cons, 100 * (1 - self.risk))
                 obj = self.objective(x, self.obj_params)
                 # print('x:', x, 'obj:', obj, 'cons:', cons)
 
@@ -234,15 +240,23 @@ class PCPSolver:
         x[0::2] = d_config[x_pos[0::2]]
         x[1::2] = k_config[x_pos[1::2]]
         cons = self.constraint(x, self.obj_params, self.bound)
+        cons = self.constraint(x, cons_params, self.bound)
+        cons = np.percentile(cons, 100 * (1 - self.risk))
         feasible = cons < 0
+        old_x_pos = x_pos.copy()
         while not feasible:  # find a feasible solution first
             x_pos = bfs(x_pos)
+            if x_pos.tolist() == old_x_pos.tolist():  # no improvement
+                break
+            old_x_pos = x_pos.copy()
             x = np.zeros(self.num_X)
             x[0::2] = d_config[x_pos[0::2]]
             x[1::2] = k_config[x_pos[1::2]]
             cons = self.constraint(x, self.obj_params, self.bound)
-            print('x:', x, 'cons:', cons, 'ftol:', self.ftol)
+            cons = self.constraint(x, cons_params, self.bound)
+            cons = np.percentile(cons, 100 * (1 - self.risk))
             feasible = cons < 0
+            print('x:', x, 'cons:', cons, 'ftol:', self.ftol)
         
         # find the best solution
         best_pos = bfs(x_pos)
@@ -251,6 +265,22 @@ class PCPSolver:
 
         return best_d, best_k
     
+    def get_vals(self, d, k):
+        assert len(d) == self.num_X // 2
+        assert len(k) == self.num_X // 2
+        x = np.zeros(self.num_X)
+        x[0::2] = d
+        x[1::2] = k
+        obj = self.objective(x, self.obj_params)
+        # cons_params = np.array(self.cons_params).T
+        # cons = self.constraint(x, cons_params, self.bound)
+        # cons = np.percentile(cons, 100 * (1 - self.risk)) + self.bound
+        cons = self.constraint(x, self.obj_params, self.bound) + self.bound
+        if self.bound_type == 'latency':
+            return cons, obj
+        else:
+            return obj, cons
+
     '''
     The generic constraint satisfaction is deprecated due to the nondeterministic behavior of
     existing solvers for the logical control flow in the constraint function (e.g, if-else and 
