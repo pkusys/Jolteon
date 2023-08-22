@@ -175,47 +175,6 @@ class PCPSolver:
         x_pos[0::2] = d_pos
         x_pos[1::2] = k_pos
 
-        # def grid_search(x_pos):
-        #     step_k = [i - len(k_config) // 2 for i in range(len(k_config))]
-        #     step_d = [i - len(d_config) // 2 for i in range(len(d_config))]
-        #     best_pos = x_pos.copy()
-        #     best_obj = self.objective(x, self.obj_params)
-        #     best_cons = self.constraint(x, self.obj_params, self.bound)
-        #     print('x:', x)
-        #     print('obj:', best_obj)
-        #     print('cons:', best_cons)
-        #     print()
-        #     for k in range(0, self.num_X):
-        #         if k % 2 == 0:  # d
-        #             step = step_d
-        #             config = d_config
-        #         else:  # k
-        #             step = step_k
-        #             config = k_config
-        #         for i in range(len(step)):
-        #             new_x_pos = x_pos.copy()
-        #             new_x_pos[k] += step[i]
-        #             if new_x_pos[k] < 0 or new_x_pos[k] >= len(config) or (k % 2 == 0 and new_x_pos[k] == 0):
-        #                 continue
-        #             new_x = np.zeros(self.num_X)
-        #             new_x[0::2] = d_config[new_x_pos[0::2]]
-        #             new_x[1::2] = k_config[new_x_pos[1::2]]
-                    
-        #             obj_val = self.objective(new_x, self.obj_params)
-        #             cons_val = self.constraint(new_x, self.obj_params, self.bound)
-
-        #             if best_cons < self.ftol:
-        #                 if cons_val < self.ftol and cons_val > best_cons and obj_val < best_obj:
-        #                     best_pos = new_x_pos.copy()
-        #                     best_obj = obj_val
-        #                     best_cons = cons_val
-        #             else:  # find a feasible solution first
-        #                 if cons_val < best_cons:
-        #                     best_pos = new_x_pos.copy()
-        #                     best_obj = obj_val
-        #                     best_cons = cons_val
-        #     return best_pos
-
         searched = set()
 
         def bfs(x_pos, max_depth=6):
@@ -287,11 +246,6 @@ class PCPSolver:
         
         # find the best solution
         best_pos = bfs(x_pos)
-        # best_x = np.zeros(self.num_X)
-        # best_x[0::2] = d_config[best_pos[0::2]]
-        # best_x[1::2] = k_config[best_pos[1::2]]
-        # best_obj = self.objective(best_x, self.obj_params)
-        # best_cons = self.constraint(best_x, self.obj_params, self.bound)
         best_d = d_config[best_pos[0::2]].tolist()
         best_k = k_config[best_pos[1::2]].tolist()
 

@@ -714,40 +714,40 @@ def main():
             print(scheduler.parallelism_ratio)
             print(scheduler.num_funcs)
         
-        # wf.init_stage_status()
-        # clear_dir = wf.workflow_name + '/stage'
-        # clear_dir = clear_dir.replace('-', '_')
-        # clear_data(clear_dir)
-        # t0 = time.time()
-        # res = wf.lazy_execute()
-        # t1 = time.time()
-        # print('Time:', t1 - t0)
-        # # print(res)
-        # infos = []
-        # time_list = []
-        # times_list = []
-        # for ids, r in enumerate(res):
-        #     l = []
-        #     for ids_, result in enumerate(r):
-        #         if ids_ == 0:
-        #             time_list.append(result)
-        #             continue
-        #         info = extract_info_from_log(result[1])
-        #         infos.append(info)
+        wf.init_stage_status()
+        clear_dir = wf.workflow_name + '/stage'
+        clear_dir = clear_dir.replace('-', '_')
+        clear_data(clear_dir)
+        t0 = time.time()
+        res = wf.lazy_execute()
+        t1 = time.time()
+        print('Time:', t1 - t0)
+        # print(res)
+        infos = []
+        time_list = []
+        times_list = []
+        for ids, r in enumerate(res):
+            l = []
+            for ids_, result in enumerate(r):
+                if ids_ == 0:
+                    time_list.append(result)
+                    continue
+                info = extract_info_from_log(result[1])
+                infos.append(info)
                 
-        #         rd = json.loads(result[0])
-        #         if 'statusCode' not in rd:
-        #             print(rd)
-        #         rd = json.loads(rd['body'])
-        #         l.append(rd['breakdown'])
-        #     times_list.append(l)
-        # cost = 0
-        # for info in infos:
-        #     cost += info['bill']
-        # print('Cost:', cost, '$')
-        # for idx, t in enumerate(time_list):
-        #     print('Stage', idx, 'time:', t)
-        #     print(times_list[idx])
+                rd = json.loads(result[0])
+                if 'statusCode' not in rd:
+                    print(rd)
+                rd = json.loads(rd['body'])
+                l.append(rd['breakdown'])
+            times_list.append(l)
+        cost = 0
+        for info in infos:
+            cost += info['bill']
+        print('Cost:', cost, '$')
+        for idx, t in enumerate(time_list):
+            print('Stage', idx, 'time:', t)
+            print(times_list[idx])
         
         wf.close_pools()
 
