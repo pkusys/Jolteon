@@ -29,8 +29,8 @@ Run each command for 6 times and take the last 5 results to eliminate the cold s
 ```
 python3 -u scheduler.py -w ml -bt latency -bv 18 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 25 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 24 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 26 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 50 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 60 > tmp.log
@@ -57,30 +57,22 @@ Ditto
 Run each command for 3 times and take the last 5 results
 ```
 python3 -u scheduler.py -w ml -s ditto -bt latency -tp 40 -nv 4 > tmp.log
-python3 -u scheduler.py -w ml -s ditto -bt cost -tp 10 -nv 0.5 > tmp.log
+python3 -u scheduler.py -w ml -s ditto -bt cost -tp 10 -nv 0.6 > tmp.log
 ```
 
 Caerus
 Run each command for 3 times and take the last 5 results
 ```
 python3 -u scheduler.py -w ml -s caerus -tp 40 -nv 4 > tmp.log
-python3 -u scheduler.py -w ml -s caerus -tp 10 -nv 0.5 > tmp.log
+python3 -u scheduler.py -w ml -s caerus -tp 10 -nv 0.6 > tmp.log
 ```
 
 Orion
 ```
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 25 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 25 -tp 40 -f 1 > tmp.log
-
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 30 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 30 -tp 40 -f 1 > tmp.log
-
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 -tp 40 -f 1 > tmp.log
-
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 -f 1 > tmp.log
-
+python3 -u scheduler.py -w ml -s orion -bt latency -bv 70 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 -f 1 > tmp.log
 ```

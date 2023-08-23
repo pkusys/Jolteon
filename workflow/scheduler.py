@@ -55,7 +55,7 @@ class Scheduler(ABC):
 
 class Jolteon(Scheduler):
     def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000, ftol=1, 
-                 vcpu_configs=[0.6, 1, 1.5, 2, 2.5, 3, 4], parallel_configs=[1, 4, 8, 16, 32]):
+                 vcpu_configs=[0.6, 1, 1.5, 2, 2.5, 3, 4], parallel_configs=[1, 4, 6, 8, 16, 32]):
         super().__init__(workflow)
         self.storage_mode = storage_mode
         self.num_funcs = []
