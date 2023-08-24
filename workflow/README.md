@@ -11,18 +11,20 @@
 1. Profile
 ```
 python3 -u scheduler.py -w ml -p 1 > tmp.log
-python3 -u scheduler.py -w tpcds -p 1 > tmp.log
 python3 -u scheduler.py -w video -p 1 > tmp.log
+python3 -u scheduler.py -w tpcds -p 1 > tmp.log
 ```
 
 2. Train
 ```
 python3 -u scheduler.py -w ml -t 1 > tmp1.log
-python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 python3 -u scheduler.py -w video -t 1 > tmp.log
+python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 ```
 
-# Run overall performance (ML-Pipeline)
+# Overall performance
+
+## ML-Pipeline
 
 Latency bound
 Run each command for 6 times and take the last 5 results to eliminate the cold start effect.
@@ -37,6 +39,7 @@ python3 -u scheduler.py -w ml -bt latency -bv 60 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 70 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 100 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 120 > tmp.log
 ```
 
 Cost bound
@@ -51,17 +54,16 @@ python3 -u scheduler.py -w ml -bt cost -bv 1600 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 2000 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 2500 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 3000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 3200 > tmp.log
 ```
 
 Ditto
-Run each command for 3 times and take the last 5 results
 ```
 python3 -u scheduler.py -w ml -s ditto -bt latency -tp 40 -nv 4 > tmp.log
 python3 -u scheduler.py -w ml -s ditto -bt cost -tp 10 -nv 0.6 > tmp.log
 ```
 
 Caerus
-Run each command for 3 times and take the last 5 results
 ```
 python3 -u scheduler.py -w ml -s caerus -tp 40 -nv 4 > tmp.log
 python3 -u scheduler.py -w ml -s caerus -tp 10 -nv 0.6 > tmp.log
@@ -75,4 +77,42 @@ python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 70 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
+```
+
+## Video-Analytics
+
+Latency bound
+
+```
+python3 -u scheduler.py -w video -bt latency -bv 8 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 10 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 12 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 15 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 20 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 50 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 60 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 80 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 100 > tmp.log
+```
+
+Cost bound
+```
+python3 -u scheduler.py -w video -bt cost -bv 800 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 900 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1000 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1200 > tmp.log
+```
+
+Ditto
+```
+python3 -u scheduler.py -w video -s ditto -bt latency -tp 128 -nv 5 > tmp.log
+python3 -u scheduler.py -w video -s ditto -bt cost -tp 20 -nv 1 > tmp.log
+```
+
+Caerus
+```
+python3 -u scheduler.py -w video -s caerus -tp 128 -nv 5 > tmp.log
+python3 -u scheduler.py -w video -s caerus -tp 20 -nv 1 > tmp.log
 ```

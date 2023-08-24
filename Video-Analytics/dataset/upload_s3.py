@@ -14,9 +14,9 @@ def upload_to_s3(li : list):
     for fn in fns:
         assert isinstance(fn, str)
         assert os.path.exists(fn)
-        cmd = ['aws', 's3', 'cp', fn, 's3://{}/Video-Analytics/dataset/'.format(bucketName)]
+        cmd = ['aws', 's3', 'cp', fn, 's3://{}/Video_Analytics/dataset/'.format(bucketName)]
         subprocess.run(cmd)
         
 if __name__ == '__main__':
-    upload_to_s3([0, 1, 2, 3])
+    upload_to_s3(list(range(32)))
     

@@ -23,7 +23,7 @@ def adjust_video_bitrate(input_path, output_path, target_bitrate = '400k'):
 if __name__ == '__main__':
     dir_path = './data/'
     out_path = './data/clip_data'
-    number = 4
+    number = 16
     
     file_names = os.listdir(dir_path)
     cnt = 0

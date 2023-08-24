@@ -18,7 +18,7 @@ def download_video(video_url, output_path, file_id):
 
 if __name__ == '__main__':
     tags = ['MUSIC', 'NEWS']
-    numbers = [50, 50]
+    numbers = [16, 16]
     cnt = 0
     for tag, num in zip(tags, numbers):
         local_cnt = 0

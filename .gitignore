@@ -196,3 +196,4 @@ samples/*
 params/*
 funcs.py
 orion_config.json
+**/data/clip_data/*

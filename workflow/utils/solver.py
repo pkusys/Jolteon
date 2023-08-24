@@ -256,7 +256,6 @@ class PCPSolver:
             cons = self.constraint(x, cons_params, self.bound)
             cons = np.percentile(cons, 100 * (1 - self.risk))
             feasible = cons < 0
-            print('x:', x, 'cons:', cons, 'ftol:', self.ftol)
         
         # find the best solution
         best_pos = bfs(x_pos)

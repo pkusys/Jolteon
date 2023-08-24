@@ -30,12 +30,12 @@ def get_config_pairs(wf_name):
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
                     [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
     elif wf_name == 'Video-Analytics':
-        pairs = [[1024, 8], [1024, 16], [1024, 32], 
-                    [1792, 4], [1792, 8], [1792, 16], [1792, 32],
+        pairs = [[1792, 4], [1792, 8], [1792, 16], [1792, 32],
                     [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
                     [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
-                    [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
+                    [7168, 4], [7168, 8], [7168, 16], [7168, 32], 
+                    [8960, 4], [8960, 8], [8960, 16], [8960, 32]]
     else:
         raise ValueError('Unknown workflow name: %s' % wf_name)
     
@@ -188,7 +188,6 @@ class StagePerfModel:
                 self.can_intra_parallel[1] = True
                 self.compute_params_avg = popt2
                 self.compute_cov_avg = pcov2
-
             # print('Compute')
             # print('d error avg:', err1)
             # print('kd error avg:', err2)

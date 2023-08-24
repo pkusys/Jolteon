@@ -22,6 +22,11 @@ class Scheduler(ABC):
     # Check if the result satisfies the minimum resource requirement to run the functions
     def check_config(self, num_funcs, num_vcpus):
         if self.workflow.workflow_name == 'ML-Pipeline':
+            for i in range(4):
+                if num_funcs[i] < 4:
+                    num_funcs[i] = 4
+                elif num_funcs[i] > 32:
+                    num_funcs[i] = 32
             if num_funcs[1]*num_vcpus[1] < 4:
                 num_funcs[1] = 4
                 num_vcpus[1] = 1
@@ -30,6 +35,21 @@ class Scheduler(ABC):
             for i in range(4):
                 if num_vcpus[i] < 1024 / 1792:
                     num_vcpus[i] = 1024 / 1792
+        elif self.workflow.workflow_name == 'Video-Analytics':
+            for i in range(4):
+                if num_funcs[i] < 4:
+                    num_funcs[i] = 4
+                elif num_funcs[i] > 32:
+                    num_funcs[i] = 32
+            if num_funcs[1] > num_funcs[0] * 2:  # chunk_size = 30, 60/30 = 2 times num_outputs
+                num_funcs[1] = num_funcs[0] * 2
+            if num_funcs[2] > num_funcs[1]:
+                num_funcs[2] = num_funcs[1]
+            if num_funcs[3] > num_funcs[2]:
+                num_funcs[3] = num_funcs[2]
+            for i in range(4):
+                if num_vcpus[i] < 1:
+                    num_vcpus[i] = 1
 
         for i, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -47,6 +67,8 @@ class Scheduler(ABC):
                     num_func = 1
                 else:
                     num_func = 2 ** math.ceil(math.log(num_func, 2))
+            elif self.workflow.workflow_name == 'Video-Analytics' and stage.stage_id == 0:
+                num_func = 2 ** math.ceil(math.log(num_func, 2))
             if stage.allow_parallel is False:
                 num_func = 1
             new_num_funcs.append(num_func)
@@ -87,6 +109,11 @@ class Jolteon(Scheduler):
         # confidence is the probability that the bounded performance is guaranteed
         assert confidence > 0 and confidence < 1
         self.confidence_error = 1 - confidence
+
+    def set_config_range(self, vcpu_configs, parallel_configs):
+        assert isinstance(vcpu_configs, list) and isinstance(parallel_configs, list)
+        self.vcpu_configs = vcpu_configs
+        self.parallel_configs = parallel_configs
 
     def store_params_and_samples(self):
         param_path = self.workflow.store_params()
@@ -658,10 +685,17 @@ def main():
             x_init = 2
             x_bound = [(4, None), (0.5, None)]
             if args.workflow == 'ml':
+                vcpu_range = [0.6, 1, 1.5, 2, 2.5, 3, 4]
+                parallel_range = [1, 4, 8, 16, 32]
+                scheduler.set_config_range(vcpu_range, parallel_range)
                 x_init = [1, 3, 16, 3, 8, 3, 1, 3]
                 x_bound = [(1, 2), (0.5, 4.1), (4, 32), (0.5, 4.1), (4, 32), (0.5, 4.1), (1, 2), (0.5, 4.1)]
             elif args.workflow == 'video':
-                x_bound = [(1, 32), (0.5, 3.05)]
+                vcpu_range = [1, 1.5, 2, 2.5, 3, 4, 5]
+                parallel_range = [1, 4, 8, 16, 32]
+                scheduler.set_config_range(vcpu_range, parallel_range)
+                x_init = [16, 2, 8, 2, 8, 2, 8, 2]
+                x_bound = [(4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1)]
             elif args.workflow == 'tpcds':
                 x_bound = [(1, 32), (0.5, 2.05)]
 
@@ -737,7 +771,7 @@ def main():
             print('Stage', idx, 'time:', t)
             print(times_list[idx])
         
-        wf.close_pools()
+    wf.close_pools()
 
 
 if __name__ == '__main__':
