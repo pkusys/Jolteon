@@ -41,12 +41,14 @@ class Scheduler(ABC):
                     num_funcs[i] = 4
                 elif num_funcs[i] > 32:
                     num_funcs[i] = 32
-            if num_funcs[1] > num_funcs[0] * 2:  # chunk_size = 30, 60/30 = 2 times num_outputs
-                num_funcs[1] = num_funcs[0] * 2
-            if num_funcs[2] > num_funcs[1]:
-                num_funcs[2] = num_funcs[1]
-            if num_funcs[3] > num_funcs[2]:
-                num_funcs[3] = num_funcs[2]
+            chunk_size = 30
+            scale = int(60 / chunk_size)
+            if num_funcs[1] > num_funcs[0] * scale:  # chunk_size = 30, 60/30 = 2 times num_outputs
+                num_funcs[1] = num_funcs[0] * scale
+            if num_funcs[2] > num_funcs[0] * scale // 2:
+                num_funcs[2] = num_funcs[0] * scale // 2
+            if num_funcs[3] > num_funcs[1]:
+                num_funcs[3] = num_funcs[1]
             for i in range(4):
                 if num_vcpus[i] < 1:
                     num_vcpus[i] = 1
