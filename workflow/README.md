@@ -65,8 +65,7 @@ python3 -u scheduler.py -w ml -s ditto -bt cost -tp 10 -nv 0.6 > tmp.log
 
 Caerus
 ```
-python3 -u scheduler.py -w ml -s caerus -tp 40 -nv 4 > tmp.log
-python3 -u scheduler.py -w ml -s caerus -tp 10 -nv 0.6 > tmp.log
+python3 -u scheduler.py -w ml -s caerus -tp 40 -nv 2.5 > tmp.log
 ```
 
 Orion
@@ -84,8 +83,7 @@ python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
 Latency bound
 
 ```
-python3 -u scheduler.py -w video -bt latency -bv 8 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 10 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 9 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 12 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 15 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 20 > tmp.log
@@ -95,24 +93,38 @@ python3 -u scheduler.py -w video -bt latency -bv 50 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 60 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 80 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 100 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 120 > tmp.log
 ```
 
 Cost bound
 ```
-python3 -u scheduler.py -w video -bt cost -bv 800 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 900 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 850 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 920 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 1000 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1200 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1100 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1500 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 2000 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 2500 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 3000 > tmp.log
 ```
 
 Ditto
 ```
 python3 -u scheduler.py -w video -s ditto -bt latency -tp 128 -nv 5 > tmp.log
-python3 -u scheduler.py -w video -s ditto -bt cost -tp 20 -nv 1 > tmp.log
+python3 -u scheduler.py -w video -s ditto -bt cost -tp 8 -nv 1 > tmp.log
 ```
 
 Caerus
 ```
-python3 -u scheduler.py -w video -s caerus -tp 128 -nv 5 > tmp.log
-python3 -u scheduler.py -w video -s caerus -tp 20 -nv 1 > tmp.log
+python3 -u scheduler.py -w video -s caerus -tp 10 -nv 5 > tmp.log
+```
+
+Orion
+```
+python3 -u scheduler.py -w video -s orion -bt latency -bv 25 -tp 20 > tmp.log
+python3 -u scheduler.py -w video -s orion -bt latency -bv 30 -tp 20 > tmp.log
+python3 -u scheduler.py -w video -s orion -bt latency -bv 40 -tp 20 > tmp.log
+python3 -u scheduler.py -w video -s orion -bt latency -bv 60 -tp 20 > tmp.log
+python3 -u scheduler.py -w video -s orion -bt latency -bv 80 -tp 20 > tmp.log
 ```

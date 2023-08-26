@@ -69,7 +69,7 @@ class Scheduler(ABC):
                     num_func = 1
                 else:
                     num_func = 2 ** math.ceil(math.log(num_func, 2))
-            elif self.workflow.workflow_name == 'Video-Analytics' and stage.stage_id == 0:
+            elif self.workflow.workflow_name == 'Video-Analytics':
                 num_func = 2 ** math.ceil(math.log(num_func, 2))
             if stage.allow_parallel is False:
                 num_func = 1
@@ -265,11 +265,11 @@ class Caerus(Scheduler):
             
 
 class Orion(Caerus):
-    def __init__(self, workflow: Workflow, storage_mode = 's3'):
+    def __init__(self, workflow: Workflow, storage_mode = 's3', max_vcpu=4, step=1024):
         super().__init__(workflow)
         self.config = []
-        self.max_memory = 1792 * 4
-        self.memory_grain = 1024
+        self.max_memory = 1792 * max_vcpu
+        self.memory_grain = step
         
     def set_config(self, total_parallelism, latency, confidence, need_search=True):
         num_funcs = [int(item * total_parallelism) for item in self.parallelism_ratio]
@@ -324,7 +324,7 @@ class Orion(Caerus):
                 searched.add(t)
                 
                 dist = self.get_distribution(new_val)
-                print(self.num_funcs, new_val, dist.probility(latency))
+                # print(self.num_funcs, new_val, dist.probility(latency))
                 if dist.probility(latency) >= confidence:
                     return new_val
 
@@ -712,7 +712,13 @@ def main():
             scheduler.set_config()
         
         elif args.scheduler == 'orion':
-            scheduler = Orion(wf)
+            if args.workflow == 'ml':
+                max_vcpu = 4
+                step = 1024
+            elif args.workflow == 'video':
+                max_vcpu = 5
+                step = 1792
+            scheduler = Orion(wf, max_vcpu=max_vcpu, step=step)
             assert args.bound_type == 'latency'
             scheduler.comp_ratio()
             if args.config_file == 0:

@@ -565,7 +565,14 @@ class Workflow:
         return param_path
 
     def get_params(self):
-        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+        # calibration
+        if self.workflow_name == 'ML-Pipeline':
+            cold_percent = 60
+        elif self.workflow_name == 'Video-Analytics':
+            cold_percent = 85
+        elif self.workflow_name == 'tpcds/dsq95':
+            cold_percent = 50
+        res = np.concatenate([stage.perf_model.params(cold_percent) for stage in self.stages])
         res = res.tolist()
         return res
 

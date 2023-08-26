@@ -270,14 +270,19 @@ class PCPSolver:
         x = np.zeros(self.num_X)
         x[0::2] = d
         x[1::2] = k
-        obj = self.objective(x, self.obj_params)
-        # cons_params = np.array(self.cons_params).T
-        # cons = self.constraint(x, cons_params, self.bound)
-        # cons = np.percentile(cons, 100 * (1 - self.risk)) + self.bound
-        cons = self.constraint(x, self.obj_params, self.bound) + self.bound
+
+        # latency prediction is calibrated by th cold start percentile
+        # cost prediction is calibrated by the sampled 95-tile
+        cons_params = np.array(self.cons_params).T
         if self.bound_type == 'latency':
+            obj = self.objective(x, cons_params)
+            obj = np.percentile(obj, 100 * (1 - self.risk))
+            cons = self.constraint(x, self.obj_params, self.bound) + self.bound
             return cons, obj
         else:
+            obj = self.objective(x, self.obj_params)
+            cons = self.constraint(x, cons_params, self.bound)
+            cons = np.percentile(cons, 100 * (1 - self.risk)) + self.bound
             return obj, cons
 
     '''
