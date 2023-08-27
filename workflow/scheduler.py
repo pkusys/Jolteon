@@ -52,6 +52,21 @@ class Scheduler(ABC):
             for i in range(4):
                 if num_vcpus[i] < 1:
                     num_vcpus[i] = 1
+        elif self.workflow.workflow_name == 'tpcds/dsq95':
+            for i in range(8):
+                if num_funcs[i] < 8:
+                    num_funcs[i] = 4
+                elif num_funcs[i] > 32:
+                    num_funcs[i] = 32
+            if num_funcs[1] > num_funcs[0]:
+                num_funcs[1] = num_funcs[0]
+            if num_funcs[2] > num_funcs[0]:
+                num_funcs[2] = num_funcs[0]
+            if num_funcs[3] > num_funcs[0]:
+                num_funcs[3] = num_funcs[0]
+            for i in range(4):
+                if num_vcpus[i] < 1:
+                    num_vcpus[i] = 1
 
         for i, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -70,6 +85,8 @@ class Scheduler(ABC):
                 else:
                     num_func = 2 ** math.ceil(math.log(num_func, 2))
             elif self.workflow.workflow_name == 'Video-Analytics':
+                num_func = 2 ** math.ceil(math.log(num_func, 2))
+            elif self.workflow.workflow_name == 'tpcds/dsq95':
                 num_func = 2 ** math.ceil(math.log(num_func, 2))
             if stage.allow_parallel is False:
                 num_func = 1
@@ -670,7 +687,10 @@ def main():
     wf = Workflow(workflow_file, perf_model_type = perf_model_type)
 
     if args.profile == 1:
+        t0 = time.time()
         wf.profile()
+        t1 = time.time()
+        print('Profile time:', t1-t0, 's\n')
     elif args.train == 1:
         wf.train_perf_model(wf.metadata_path('profiles'))
         if args.scheduler == 'jolteon':
@@ -699,7 +719,12 @@ def main():
                 x_init = [16, 2, 8, 2, 8, 2, 8, 2]
                 x_bound = [(4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1)]
             elif args.workflow == 'tpcds':
-                x_bound = [(1, 32), (0.5, 2.05)]
+                vcpu_range = [0.5, 0.6, 0.7, 0.8, 0.9, 1]
+                parallel_range = [1, 8, 16, 24, 32, 48, 64]
+                scheduler.set_config_range(vcpu_range, parallel_range)
+                x_init = []
+                x_bound = [(8, 64), (0.5, 1.1), (1, 2), (0.5, 1.1), (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1),
+                           (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1), (1, 2), (0.5, 1.1)]
 
             # scheduler.store_params_and_samples()
             # param_path = wf.metadata_path('params')
@@ -709,7 +734,7 @@ def main():
             scheduler.search_config(x_bound=x_bound, init_vals=x_init)
             t1 = time.time()
             print('Search time:', t1-t0, 's\n')
-            scheduler.set_config()
+            scheduler.set_config(False)
         
         elif args.scheduler == 'orion':
             if args.workflow == 'ml':
@@ -744,40 +769,40 @@ def main():
             print(scheduler.parallelism_ratio)
             print(scheduler.num_funcs)
         
-        wf.init_stage_status()
-        clear_dir = wf.workflow_name + '/stage'
-        clear_dir = clear_dir.replace('-', '_')
-        clear_data(clear_dir)
-        t0 = time.time()
-        res = wf.lazy_execute()
-        t1 = time.time()
-        print('Time:', t1 - t0)
-        # print(res)
-        infos = []
-        time_list = []
-        times_list = []
-        for ids, r in enumerate(res):
-            l = []
-            for ids_, result in enumerate(r):
-                if ids_ == 0:
-                    time_list.append(result)
-                    continue
-                info = extract_info_from_log(result[1])
-                infos.append(info)
+        # wf.init_stage_status()
+        # clear_dir = wf.workflow_name + '/stage'
+        # clear_dir = clear_dir.replace('-', '_')
+        # clear_data(clear_dir)
+        # t0 = time.time()
+        # res = wf.lazy_execute()
+        # t1 = time.time()
+        # print('Time:', t1 - t0)
+        # # print(res)
+        # infos = []
+        # time_list = []
+        # times_list = []
+        # for ids, r in enumerate(res):
+        #     l = []
+        #     for ids_, result in enumerate(r):
+        #         if ids_ == 0:
+        #             time_list.append(result)
+        #             continue
+        #         info = extract_info_from_log(result[1])
+        #         infos.append(info)
                 
-                rd = json.loads(result[0])
-                if 'statusCode' not in rd:
-                    print(rd)
-                rd = json.loads(rd['body'])
-                l.append(rd['breakdown'])
-            times_list.append(l)
-        cost = 0
-        for info in infos:
-            cost += info['bill']
-        print('Cost:', cost, '$')
-        for idx, t in enumerate(time_list):
-            print('Stage', idx, 'time:', t)
-            print(times_list[idx])
+        #         rd = json.loads(result[0])
+        #         if 'statusCode' not in rd:
+        #             print(rd)
+        #         rd = json.loads(rd['body'])
+        #         l.append(rd['breakdown'])
+        #     times_list.append(l)
+        # cost = 0
+        # for info in infos:
+        #     cost += info['bill']
+        # print('Cost:', cost, '$')
+        # for idx, t in enumerate(time_list):
+        #     print('Stage', idx, 'time:', t)
+        #     print(times_list[idx])
         
     wf.close_pools()
 

@@ -128,3 +128,8 @@ python3 -u scheduler.py -w video -s orion -bt latency -bv 40 -tp 20 > tmp.log
 python3 -u scheduler.py -w video -s orion -bt latency -bv 60 -tp 20 > tmp.log
 python3 -u scheduler.py -w video -s orion -bt latency -bv 80 -tp 20 > tmp.log
 ```
+
+## TPC-DS
+
+Latency bound
+```
