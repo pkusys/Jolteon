@@ -571,7 +571,7 @@ class Workflow:
         elif self.workflow_name == 'Video-Analytics':
             cold_percent = 85
         elif self.workflow_name == 'tpcds/dsq95':
-            cold_percent = 50
+            cold_percent = 75
         res = np.concatenate([stage.perf_model.params(cold_percent) for stage in self.stages])
         res = res.tolist()
         return res
@@ -727,7 +727,7 @@ class Workflow:
                 s += func2_def
                 for stage in secondary_path:
                     s += stage.perf_model.generate_func_code(cons_mode, var, param, 
-                                                            parent_ids[stage.stage_id], solver_type) + ' + '
+                                                             parent_ids[stage.stage_id], solver_type) + ' + '
                 s = s[:-3]
                 s += bound + '\n\n'
         else:

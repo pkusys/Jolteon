@@ -4,7 +4,8 @@ import numpy as np
 import scipy.optimize as scipy_opt
 from scipy.optimize import NonlinearConstraint
 from deprecation import deprecated
-from .basic_class import MyQueue
+from .basic_class import MyQueue, MyProcess
+from multiprocessing import Manager, Queue
 
 '''
 PCP: Probabilistic (Chance) Constrained Programming
@@ -20,6 +21,8 @@ class PCPSolver:
                  k_configs=[0.5, 1, 1.5, 2, 2.5, 3, 4],
                  d_configs=[1, 4, 8, 16, 32],
                  bound_type='latency',
+                 need_probe=None,
+                 probe_depth=4, 
                  solver_info={'optlib': 'scipy', 'method': 'SLSQP'}):
         assert isinstance(num_X, int) and num_X > 0
         assert callable(objective) and callable(constraint)
@@ -62,6 +65,8 @@ class PCPSolver:
         self.d_configs = d_configs
 
         self.bound_type = bound_type
+        self.need_probe = need_probe
+        self.probe_depth = probe_depth
 
         # Solver information for the sample approximation problem
         self.solver_info = solver_info
@@ -118,8 +123,9 @@ class PCPSolver:
         cons_params = np.array(self.cons_params).T
         nonlinear_constraints = NonlinearConstraint(lambda x: self.constraint(x, cons_params, self.bound), -np.inf, 0)
         if self.constraint_2 is not None:
-            nonlinear_constraints_2 = NonlinearConstraint(lambda x: self.constraint_2(x, obj_params), -np.inf, 0)
-            nonlinear_constraints = [nonlinear_constraints, nonlinear_constraints_2]
+            b = self.bound if self.bound_type == 'latency' else 0
+            nonlinear_constraints_2 = NonlinearConstraint(lambda x: self.constraint_2(x, obj_params, b), -np.inf, 0)
+            nonlinear_constraints = [nonlinear_constraints_2, nonlinear_constraints]
         
         res = scipy_opt.minimize(lambda x: self.objective(x, obj_params), x0, 
                                     method=self.solver_info['method'],
@@ -155,6 +161,129 @@ class PCPSolver:
 
         return res
 
+    def probe_parallel(self, d_init, k_init):
+        # assume init is within the feasible region
+        d_pos = []
+        k_pos = []
+        d_config = np.array(self.d_configs)
+        k_config = np.array(self.k_configs)
+        for d in d_init:
+            mask = (d_config == d)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                d_pos.append(j)
+        for k in k_init:
+            mask = (k_config == k)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                k_pos.append(j)
+        
+        d_pos = np.array(d_pos)
+        k_pos = np.array(k_pos)
+        x_pos = np.zeros(self.num_X, dtype=int)
+        x_pos[0::2] = d_pos
+        x_pos[1::2] = k_pos
+
+        cons_params = np.array(self.cons_params).T
+
+        searched = Manager().dict()
+
+        need_pos = []
+        if self.need_probe is not None:
+            need_pos = [i for i in range(self.num_X) if self.need_probe[i]]
+
+        def bfs(x_pos, max_depth=8):
+            q = MyQueue()
+            # searched.add(tuple(x_pos))
+            searched[tuple(x_pos)] = 1
+            q.push([x_pos, 0])
+
+            best_pos = x_pos.copy()
+            best_x = np.zeros(self.num_X)
+            best_x[0::2] = d_config[best_pos[0::2]]
+            best_x[1::2] = k_config[best_pos[1::2]]
+            best_obj = self.objective(best_x, self.obj_params)
+            best_cons = self.constraint(best_x, self.obj_params, self.bound)
+
+            steps = [-1, 1]
+
+            while len(q) > 0:
+                p = q.pop()
+
+                x = np.zeros(self.num_X)
+                x[0::2] = d_config[p[0][0::2]]
+                x[1::2] = k_config[p[0][1::2]]
+                cons = self.constraint(x, cons_params, self.bound)
+                cons = np.percentile(cons, 100 * (1 - self.risk))
+                obj = self.objective(x, self.obj_params)
+
+                if best_cons < 0:  # tight bound
+                    if cons < 0 and cons > best_cons and obj < best_obj:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+                else:  # find a feasible solution first
+                    if cons < best_cons:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+
+                if p[1] < max_depth:
+                    for t in range(self.num_X):
+                        if len(need_pos) > 0 and t not in need_pos:
+                            continue
+                        if t % 2 == 0:  # d
+                            config = d_config
+                        else:  # k
+                            config = k_config
+                        for s in steps:
+                            new_x_pos = p[0].copy()
+                            new_x_pos[t] += s
+                            if new_x_pos[t] < 0 or new_x_pos[t] >= len(config) or (t % 2 == 0 and new_x_pos[t] == 0):
+                                continue
+                            if tuple(new_x_pos) in searched:
+                                continue
+                            searched[tuple(new_x_pos)] = 1
+                            q.push([new_x_pos, p[1] + 1])
+
+            return best_pos, best_obj, best_cons
+
+        threads = []
+
+        pq = Queue()
+        for i in range(len(need_pos)):
+            new_x_pos = x_pos.copy()
+            new_x_pos[need_pos[i]] += 1
+            if (need_pos[i] % 2 == 0 and new_x_pos[need_pos[i]] < len(d_config)):
+                threads.append(MyProcess(target=bfs, args=new_x_pos, queue=pq))
+            if (need_pos[i] % 2 == 1 and new_x_pos[need_pos[i]] < len(k_config)):
+                threads.append(MyProcess(target=bfs, args=new_x_pos, queue=pq))
+            new_x_pos = x_pos.copy()
+            new_x_pos[need_pos[i]] -= 1
+            if new_x_pos[need_pos[i]] >= 0 or (new_x_pos[need_pos[i]] % 2 == 0 and new_x_pos[need_pos[i]] > 0):
+                threads.append(MyProcess(target=bfs, args=new_x_pos))
+        for t in threads:
+            t.start()
+        # get the results of all threads
+        best_pos = x_pos.copy()
+        best_x = np.zeros(self.num_X)
+        best_x[0::2] = d_config[best_pos[0::2]]
+        best_x[1::2] = k_config[best_pos[1::2]]
+        best_obj = self.objective(best_x, self.obj_params)
+        best_cons = self.constraint(best_x, self.obj_params, self.bound)
+        for t in threads:
+            t.join()
+        while not pq.empty():
+            pos, obj, cons = t._result
+            if cons > best_cons:
+                best_pos = pos
+                best_obj = obj
+                best_cons = cons
+        best_d = d_config[best_pos[0::2]].tolist()
+        best_k = k_config[best_pos[1::2]].tolist()
+
+        return best_d, best_k
+
     def probe(self, d_init, k_init):
         # assume init is within the feasible region
         d_pos = []
@@ -181,6 +310,10 @@ class PCPSolver:
         cons_params = np.array(self.cons_params).T
 
         searched = set()
+
+        need_pos = []
+        if self.need_probe is not None:
+            need_pos = [i for i in range(self.num_X) if self.need_probe[i]]
 
         def bfs(x_pos, max_depth=4):
             q = MyQueue()
@@ -220,6 +353,8 @@ class PCPSolver:
 
                 if p[1] < max_depth:
                     for t in range(self.num_X):
+                        if len(need_pos) > 0 and t not in need_pos:
+                            continue
                         if t % 2 == 0:  # d
                             config = d_config
                         else:  # k
@@ -239,13 +374,12 @@ class PCPSolver:
         x = np.zeros(self.num_X)
         x[0::2] = d_config[x_pos[0::2]]
         x[1::2] = k_config[x_pos[1::2]]
-        cons = self.constraint(x, self.obj_params, self.bound)
         cons = self.constraint(x, cons_params, self.bound)
         cons = np.percentile(cons, 100 * (1 - self.risk))
         feasible = cons < 0
         old_x_pos = x_pos.copy()
         while not feasible:  # find a feasible solution first
-            x_pos = bfs(x_pos)
+            x_pos = bfs(x_pos, self.probe_depth)
             if x_pos.tolist() == old_x_pos.tolist():  # no improvement
                 break
             old_x_pos = x_pos.copy()
@@ -258,7 +392,7 @@ class PCPSolver:
             feasible = cons < 0
         
         # find the best solution
-        best_pos = bfs(x_pos)
+        best_pos = bfs(x_pos, self.probe_depth)
         best_d = d_config[best_pos[0::2]].tolist()
         best_k = k_config[best_pos[1::2]].tolist()
 

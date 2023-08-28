@@ -1,25 +1,23 @@
-from multiprocessing import Process
+from multiprocessing import Process, Queue
 import threading
 import numpy as np
 
 class MyProcess(Process):
-    def __init__(self, target, args):
+    def __init__(self, target, args, queue=None):
         super().__init__()
         assert callable(target)
         self._result = None
         self._my_function = target
         self._args = args
+        self.queue = queue
 
     def run(self):
         if self._args is None:
             result = self._my_function()
         else:
             result = self._my_function(self._args)
-        self._result = result
-
-    @property
-    def result(self):
-        return self._result
+        if self.queue:
+            self.queue.put(result)
 
 class MyThread(threading.Thread):
     def __init__(self, target, args):

@@ -133,3 +133,27 @@ python3 -u scheduler.py -w video -s orion -bt latency -bv 80 -tp 20 > tmp.log
 
 Latency bound
 ```
+python3 -u scheduler.py -w tpcds -bt latency -bv 23 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 35 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 55 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 65 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 75 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 78 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 80 > tmp.log
+```
+
+Cost bound
+```
+python3 -u scheduler.py -w tpcds -bt cost -bv 1700 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1750 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1800 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1850 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1950 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2100 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2200 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2300 > tmp.log
+```

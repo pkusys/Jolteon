@@ -53,20 +53,17 @@ class Scheduler(ABC):
                 if num_vcpus[i] < 1:
                     num_vcpus[i] = 1
         elif self.workflow.workflow_name == 'tpcds/dsq95':
-            for i in range(8):
-                if num_funcs[i] < 8:
-                    num_funcs[i] = 4
-                elif num_funcs[i] > 32:
-                    num_funcs[i] = 32
-            if num_funcs[1] > num_funcs[0]:
-                num_funcs[1] = num_funcs[0]
-            if num_funcs[2] > num_funcs[0]:
-                num_funcs[2] = num_funcs[0]
-            if num_funcs[3] > num_funcs[0]:
-                num_funcs[3] = num_funcs[0]
-            for i in range(4):
-                if num_vcpus[i] < 1:
-                    num_vcpus[i] = 1
+            if num_funcs[0] <= 8:
+                num_funcs[0] = 8
+                num_vcpus[0] = 1
+            num_funcs[2] = num_funcs[0]
+            if num_funcs[2] <= 8:
+                num_funcs[2] = 8
+                num_vcpus[2] = 1
+            if num_funcs[4] > num_funcs[2]:
+                num_funcs[4] = num_funcs[2]
+            if num_funcs[6] > num_funcs[4]:
+                num_funcs[6] = num_funcs[4]
 
         for i, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -96,7 +93,8 @@ class Scheduler(ABC):
 
 class Jolteon(Scheduler):
     def __init__(self, workflow: Workflow, storage_mode='s3', max_sample_size=10000, ftol=1, 
-                 vcpu_configs=[0.6, 1, 1.5, 2, 2.5, 3, 4], parallel_configs=[1, 4, 6, 8, 16, 32]):
+                 vcpu_configs=[0.6, 1, 1.5, 2, 2.5, 3, 4], parallel_configs=[1, 4, 6, 8, 16, 32], 
+                 need_probe=None, probe_depth=4):
         super().__init__(workflow)
         self.storage_mode = storage_mode
         self.num_funcs = []
@@ -114,6 +112,8 @@ class Jolteon(Scheduler):
         self.ftol = ftol
         self.vcpu_configs = vcpu_configs
         self.parallel_configs = parallel_configs
+        self.need_probe = need_probe  # List of configs that need to be probed, None means all
+        self.probe_depth = probe_depth
 
     def set_bound(self, bound_type, bound, service_level):
         # service_level is the probability that the latencty or cost is less than the bound
@@ -134,6 +134,11 @@ class Jolteon(Scheduler):
         self.vcpu_configs = vcpu_configs
         self.parallel_configs = parallel_configs
 
+    def set_probe(self, need_probe, probe_depth):
+        assert isinstance(need_probe, list)
+        self.need_probe = need_probe
+        self.probe_depth = probe_depth
+
     def store_params_and_samples(self):
         param_path = self.workflow.store_params()
         sample_path = self.workflow.sample_offline(self.max_sample_size)
@@ -142,8 +147,8 @@ class Jolteon(Scheduler):
     def get_params_and_samples(self):
         t0 = time.time()
         self.obj_params = self.workflow.get_params()
-        num_samples = PCPSolver.sample_size(len(self.workflow.stages), self.risk, 0, 
-                                            self.confidence_error)
+        num_samples = PCPSolver.sample_size(len(self.workflow.stages), 
+                                            self.risk, 0, self.confidence_error)
         self.cons_params = self.workflow.sample_online(num_samples)
         t1 = time.time()
         print('Sample size:', num_samples)
@@ -208,7 +213,8 @@ class Jolteon(Scheduler):
                                 self.bound, self.obj_params, self.cons_params, 
                                 risk=self.risk, confidence_error=self.confidence_error,
                                 ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
-                                bound_type=self.bound_type)
+                                bound_type=self.bound_type, 
+                                need_probe=self.need_probe, probe_depth=self.probe_depth)
         res = self.solver.iter_solve(init_vals, x_bound)
         t1 = time.time()
         print('Final bound:', self.solver.bound)
@@ -720,21 +726,28 @@ def main():
                 x_bound = [(4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1), (4, 32), (1, 5.1)]
             elif args.workflow == 'tpcds':
                 vcpu_range = [0.5, 0.6, 0.7, 0.8, 0.9, 1]
-                parallel_range = [1, 8, 16, 24, 32, 48, 64]
+                parallel_range = [1, 4, 8, 16, 20, 24, 32, 40, 48]
                 scheduler.set_config_range(vcpu_range, parallel_range)
-                x_init = []
-                x_bound = [(8, 64), (0.5, 1.1), (1, 2), (0.5, 1.1), (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1),
-                           (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1), (8, 64), (0.5, 1.1), (1, 2), (0.5, 1.1)]
+                probe = [True, True, 
+                         False, True, 
+                         False, False, 
+                         False, False,
+                         True, True, 
+                         False, False, 
+                         False, False, 
+                         False, False]
+                scheduler.set_probe(probe, 7)
+                x_init = [24, 0.8, 1, 0.8, 24, 0.8, 8, 0.8, 
+                          24, 0.8, 8, 0.8, 24, 0.8, 1, 0.8]
+                x_bound = [(8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1), (8, 48), (0.49, 1.1), (4, 16), (0.49, 1.1),
+                           (8, 48), (0.49, 1.1), (4, 8), (0.49, 1.1), (8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1)]
 
-            # scheduler.store_params_and_samples()
-            # param_path = wf.metadata_path('params')
-            # sample_path = wf.metadata_path('samples')
             scheduler.get_params_and_samples()
             t0 = time.time()
             scheduler.search_config(x_bound=x_bound, init_vals=x_init)
             t1 = time.time()
             print('Search time:', t1-t0, 's\n')
-            scheduler.set_config(False)
+            scheduler.set_config()
         
         elif args.scheduler == 'orion':
             if args.workflow == 'ml':
@@ -743,6 +756,9 @@ def main():
             elif args.workflow == 'video':
                 max_vcpu = 5
                 step = 1792
+            elif args.workflow == 'tpcds':
+                max_vcpu = 1
+                step = 180
             scheduler = Orion(wf, max_vcpu=max_vcpu, step=step)
             assert args.bound_type == 'latency'
             scheduler.comp_ratio()
@@ -769,40 +785,40 @@ def main():
             print(scheduler.parallelism_ratio)
             print(scheduler.num_funcs)
         
-        # wf.init_stage_status()
-        # clear_dir = wf.workflow_name + '/stage'
-        # clear_dir = clear_dir.replace('-', '_')
-        # clear_data(clear_dir)
-        # t0 = time.time()
-        # res = wf.lazy_execute()
-        # t1 = time.time()
-        # print('Time:', t1 - t0)
-        # # print(res)
-        # infos = []
-        # time_list = []
-        # times_list = []
-        # for ids, r in enumerate(res):
-        #     l = []
-        #     for ids_, result in enumerate(r):
-        #         if ids_ == 0:
-        #             time_list.append(result)
-        #             continue
-        #         info = extract_info_from_log(result[1])
-        #         infos.append(info)
+        wf.init_stage_status()
+        clear_dir = wf.workflow_name + '/stage'
+        clear_dir = clear_dir.replace('-', '_')
+        clear_data(clear_dir)
+        t0 = time.time()
+        res = wf.lazy_execute()
+        t1 = time.time()
+        print('Time:', t1 - t0)
+        # print(res)
+        infos = []
+        time_list = []
+        times_list = []
+        for ids, r in enumerate(res):
+            l = []
+            for ids_, result in enumerate(r):
+                if ids_ == 0:
+                    time_list.append(result)
+                    continue
+                info = extract_info_from_log(result[1])
+                infos.append(info)
                 
-        #         rd = json.loads(result[0])
-        #         if 'statusCode' not in rd:
-        #             print(rd)
-        #         rd = json.loads(rd['body'])
-        #         l.append(rd['breakdown'])
-        #     times_list.append(l)
-        # cost = 0
-        # for info in infos:
-        #     cost += info['bill']
-        # print('Cost:', cost, '$')
-        # for idx, t in enumerate(time_list):
-        #     print('Stage', idx, 'time:', t)
-        #     print(times_list[idx])
+                rd = json.loads(result[0])
+                if 'statusCode' not in rd:
+                    print(rd)
+                rd = json.loads(rd['body'])
+                l.append(rd['breakdown'])
+            times_list.append(l)
+        cost = 0
+        for info in infos:
+            cost += info['bill']
+        print('Cost:', cost, '$')
+        for idx, t in enumerate(time_list):
+            print('Stage', idx, 'time:', t)
+            print(times_list[idx])
         
     wf.close_pools()
 
