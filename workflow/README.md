@@ -26,17 +26,20 @@ python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 
 ## ML-Pipeline
 
+python3 -u scheduler.py -w ml -bt latency -bv 24 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 26 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 50 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 70 > tmp.log
+
 Latency bound
 Run each command for 6 times and take the last 5 results to eliminate the cold start effect.
 ```
 python3 -u scheduler.py -w ml -bt latency -bv 18 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 24 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 26 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 25 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 50 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 60 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 70 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 100 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 120 > tmp.log
@@ -47,9 +50,7 @@ Run each command for 6 times and take the last 5 results
 ```
 python3 -u scheduler.py -w ml -bt cost -bv 700 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 800 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 900 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 1000 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 1300 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 1600 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 2000 > tmp.log
 python3 -u scheduler.py -w ml -bt cost -bv 2500 > tmp.log
@@ -80,17 +81,26 @@ python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
 
 ## Video-Analytics
 
+Overall
+```
+python3 -u scheduler.py -w video -bt latency -bv 9 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 12 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 20 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 920 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 850 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 80 > tmp.log
+```
+
 Latency bound
 
 ```
 python3 -u scheduler.py -w video -bt latency -bv 9 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 12 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 15 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 20 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 30 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 40 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 50 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 60 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 65 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 80 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 100 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 120 > tmp.log
@@ -101,12 +111,11 @@ Cost bound
 python3 -u scheduler.py -w video -bt cost -bv 850 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 920 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 1000 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1100 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 1300 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 1500 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1800 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 2000 > tmp.log
 python3 -u scheduler.py -w video -bt cost -bv 2500 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 3000 > tmp.log
 ```
 
 Ditto
@@ -131,6 +140,17 @@ python3 -u scheduler.py -w video -s orion -bt latency -bv 80 -tp 20 > tmp.log
 
 ## TPC-DS
 
+Overall
+```
+python3 -u scheduler.py -w tpcds -bt cost -bv 2200 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 23 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1800 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 65 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 75 > tmp.log
+```
+
 Latency bound
 ```
 python3 -u scheduler.py -w tpcds -bt latency -bv 23 > tmp.log
@@ -147,13 +167,11 @@ python3 -u scheduler.py -w tpcds -bt latency -bv 80 > tmp.log
 Cost bound
 ```
 python3 -u scheduler.py -w tpcds -bt cost -bv 1700 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 1750 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 1800 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 1850 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 1900 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 1950 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2000 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2100 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2200 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2300 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2400 > tmp.log
 ```
