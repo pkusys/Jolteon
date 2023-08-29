@@ -26,10 +26,16 @@ python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 
 ## ML-Pipeline
 
+Overall
+```
+python3 -u scheduler.py -w ml -bt latency -bv 18 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 20 > tmp.log
 python3 -u scheduler.py -w ml -bt latency -bv 24 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 26 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 50 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 70 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 40 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 60 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 80 > tmp.log
+```
 
 Latency bound
 Run each command for 6 times and take the last 5 results to eliminate the cold start effect.
@@ -75,7 +81,6 @@ python3 -u scheduler.py -w ml -s orion -bt latency -bv 25 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 30 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 40 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 50 -tp 40 > tmp.log
-python3 -u scheduler.py -w ml -s orion -bt latency -bv 70 -tp 40 > tmp.log
 python3 -u scheduler.py -w ml -s orion -bt latency -bv 80 -tp 40 > tmp.log
 ```
 
@@ -131,11 +136,11 @@ python3 -u scheduler.py -w video -s caerus -tp 10 -nv 5 > tmp.log
 
 Orion
 ```
+python3 -u scheduler.py -w video -s orion -bt latency -bv 20 -tp 20 > tmp.log
 python3 -u scheduler.py -w video -s orion -bt latency -bv 25 -tp 20 > tmp.log
-python3 -u scheduler.py -w video -s orion -bt latency -bv 30 -tp 20 > tmp.log
 python3 -u scheduler.py -w video -s orion -bt latency -bv 40 -tp 20 > tmp.log
+python3 -u scheduler.py -w video -s orion -bt latency -bv 50 -tp 20 > tmp.log
 python3 -u scheduler.py -w video -s orion -bt latency -bv 60 -tp 20 > tmp.log
-python3 -u scheduler.py -w video -s orion -bt latency -bv 80 -tp 20 > tmp.log
 ```
 
 ## TPC-DS
@@ -146,9 +151,9 @@ python3 -u scheduler.py -w tpcds -bt cost -bv 2200 > tmp.log
 python3 -u scheduler.py -w tpcds -bt latency -bv 23 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2000 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 1800 > tmp.log
-python3 -u scheduler.py -w tpcds -bt latency -bv 30 > tmp.log
-python3 -u scheduler.py -w tpcds -bt latency -bv 65 > tmp.log
-python3 -u scheduler.py -w tpcds -bt latency -bv 75 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1600 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1700 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 80 > tmp.log
 ```
 
 Latency bound
@@ -174,4 +179,24 @@ python3 -u scheduler.py -w tpcds -bt cost -bv 2100 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2200 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2300 > tmp.log
 python3 -u scheduler.py -w tpcds -bt cost -bv 2400 > tmp.log
+```
+
+Ditto
+```
+python3 -u scheduler.py -w tpcds -s ditto -bt latency -tp 160 -nv 1 > tmp.log
+python3 -u scheduler.py -w tpcds -s ditto -bt cost -tp 20 -nv 0.5 > tmp.log
+```
+
+Caerus
+```
+python3 -u scheduler.py -w tpcds -s caerus -tp 40 -nv 0.7 > tmp.log
+```
+
+Orion
+```
+python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 24 -tp 40 > tmp.log
+python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 26.1 -tp 40 > tmp.log
+python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 30 -tp 40 > tmp.log
+python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 35 -tp 40 > tmp.log
+python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 60 -tp 40 > tmp.log
 ```

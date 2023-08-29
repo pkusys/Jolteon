@@ -64,6 +64,9 @@ class Scheduler(ABC):
                 num_funcs[4] = num_funcs[2]
             if num_funcs[6] > num_funcs[4]:
                 num_funcs[6] = num_funcs[4]
+            for i in range(8):
+                if num_vcpus[i] < 0.5:
+                    num_vcpus[i] = 0.5
 
         for i, stage in enumerate(self.workflow.stages):
             if stage.allow_parallel is False:
@@ -84,7 +87,13 @@ class Scheduler(ABC):
             elif self.workflow.workflow_name == 'Video-Analytics':
                 num_func = 2 ** math.ceil(math.log(num_func, 2))
             elif self.workflow.workflow_name == 'tpcds/dsq95':
-                num_func = 2 ** math.ceil(math.log(num_func, 2))
+                parallel_configs = [4, 8, 16, 20, 24, 32, 40, 48]
+                for p in parallel_configs:
+                    if num_func <= p:
+                        num_func = p
+                        break
+                if num_func > parallel_configs[-1]:
+                    num_func = parallel_configs[-1]
             if stage.allow_parallel is False:
                 num_func = 1
             new_num_funcs.append(num_func)
@@ -288,11 +297,15 @@ class Caerus(Scheduler):
             
 
 class Orion(Caerus):
-    def __init__(self, workflow: Workflow, storage_mode = 's3', max_vcpu=4, step=1024):
+    def __init__(self, workflow: Workflow, storage_mode = 's3', max_vcpu=4, step=1024, init_mem=None):
         super().__init__(workflow)
         self.config = []
         self.max_memory = 1792 * max_vcpu
         self.memory_grain = step
+        self.init_mem = None
+        if init_mem is not None:
+            self.init_mem = [init_mem for i in range(len(self.workflow.stages))]
+        self.stage_threshold = 6
         
     def set_config(self, total_parallelism, latency, confidence, need_search=True):
         num_funcs = [int(item * total_parallelism) for item in self.parallelism_ratio]
@@ -324,33 +337,57 @@ class Orion(Caerus):
     def bestfit(self, latency, confidence):
         memory_grain = self.memory_grain
         config_list = [memory_grain for i in range(len(self.workflow.stages))]
+        if self.init_mem is not None:
+            config_list = self.init_mem.copy()
 
         search_spcae = MyQueue()
         search_spcae.push(config_list)
 
         searched = set()
+        searched.add(tuple(config_list))
+
+        dist = self.get_distribution(config_list)
+        if dist.probility(latency) >= confidence:
+            return config_list
 
         while len(search_spcae) > 0:
             val = search_spcae.pop()
 
-            for i in range(len(val)):
-                new_val = val.copy()
-                new_val[i] += memory_grain
+            if len(self.workflow.stages) < self.stage_threshold:
+                for i in range(len(val)):
+                    new_val = val.copy()
+                    new_val[i] += memory_grain
 
+                    t = tuple(new_val)
+                    if t in searched:
+                        continue
+                    # Max limit
+                    if new_val[i] > self.max_memory:
+                        continue
+                    search_spcae.push(new_val)
+                    searched.add(t)
+                    
+                    dist = self.get_distribution(new_val)
+                    # print(self.num_funcs, new_val, dist.probility(latency))
+                    if dist.probility(latency) >= confidence:
+                        return new_val
+            else:  # Fast search for large workflow
+                new_val = val.copy()
+                for i in range(len(val)):
+                    new_val[i] += memory_grain
+                if new_val[0] > self.max_memory:
+                    continue
                 t = tuple(new_val)
                 if t in searched:
                     continue
-                # Max limit
-                if new_val[i] > self.max_memory:
-                    continue
                 search_spcae.push(new_val)
                 searched.add(t)
-                
+
                 dist = self.get_distribution(new_val)
                 # print(self.num_funcs, new_val, dist.probility(latency))
                 if dist.probility(latency) >= confidence:
                     return new_val
-
+        
         config_list = [self.max_memory for i in range(len(self.workflow.stages))]
         return config_list
 
@@ -750,6 +787,7 @@ def main():
             scheduler.set_config()
         
         elif args.scheduler == 'orion':
+            init_mem = None
             if args.workflow == 'ml':
                 max_vcpu = 4
                 step = 1024
@@ -757,9 +795,10 @@ def main():
                 max_vcpu = 5
                 step = 1792
             elif args.workflow == 'tpcds':
-                max_vcpu = 1
-                step = 180
-            scheduler = Orion(wf, max_vcpu=max_vcpu, step=step)
+                max_vcpu = 1.2
+                step = 179.2
+                init_mem = int(1792 * 0.5)
+            scheduler = Orion(wf, max_vcpu=max_vcpu, step=step, init_mem=init_mem)
             assert args.bound_type == 'latency'
             scheduler.comp_ratio()
             if args.config_file == 0:
