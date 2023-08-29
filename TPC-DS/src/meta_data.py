@@ -13,7 +13,7 @@ def read_local_table(key):
 
     return part_data
 
-def count_bytes_io(byte_io, grain=100):
+def count_bytes_io(byte_io, grain=1000):
     assert isinstance(byte_io, BytesIO)
     assert isinstance(grain, int)
     
@@ -91,10 +91,10 @@ def generate_meta_data_s3(bucket, dir):
 
 if __name__ == '__main__':
     bn = 'serverless-bound'
-    di = 'tpcds/test'
+    di = 'tpcds'
     
-    generate_meta_data_local('/home/ubuntu/workspace/serverless-bound/TPC-DS/data')
-    # generate_meta_data_s3(bn, di)
+    # generate_meta_data_local('/home/ubuntu/workspace/data')
+    generate_meta_data_s3(bn, di)
     # with open('/home/ubuntu/workspace/serverless-bound/TPC-DS/data/ship_mode.dat', 'rb') as f:
     #     byte_data = f.read()
     #     byte_io = BytesIO(byte_data)

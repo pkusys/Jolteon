@@ -5,13 +5,12 @@ import time
 
 from utils import Distribution
 
-config_pairs = [[1024, 2], [1792, 1], [3584, 2], [7168, 8]]
-
-# config_pairs = [[1024, 2], [1024, 4], [1024, 8],
-#                 [1792, 1], [1792, 2], [1792, 4], [1792, 8],
-#                 [2048, 1], [2048, 2], [2048, 4], [2048, 8],
-#                 [3584, 1], [3584, 2], [3584, 4], [3584, 8],
-#                 [7168, 1], [7168, 2], [7168, 4], [7168, 8]]
+config_pairs = [[1024, 8], [1024, 16], [1024, 32], 
+                [1792, 4], [1792, 8], [1792, 16], [1792, 32],
+                [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
+                [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
+                [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
+                [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
 
 def get_config_pairs_dist(wf_name):
     # the len
@@ -22,20 +21,20 @@ def get_config_pairs_dist(wf_name):
                     [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
                     [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
-    elif wf_name == 'tpcds/dsq95':
-        pairs = [[1024, 8], [1024, 16], [1024, 32], 
-                    [1792, 4], [1792, 8], [1792, 16], [1792, 32],
-                    [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
-                    [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
-                    [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
-                    [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
     elif wf_name == 'Video-Analytics':
-        pairs = [[1024, 8], [1024, 16], [1024, 32], 
-                    [1792, 4], [1792, 8], [1792, 16], [1792, 32],
+        pairs = [[1792, 4], [1792, 8], [1792, 16], [1792, 32],
                     [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
                     [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
-                    [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
+                    [7168, 4], [7168, 8], [7168, 16], [7168, 32], 
+                    [8960, 4], [8960, 8], [8960, 16], [8960, 32]]
+    elif wf_name == 'tpcds/dsq95':
+        pairs = [[892, 16], [892, 24], [892, 32], [892, 48], [892, 64], 
+                 [1078, 16], [1078, 24], [1078, 32], [1078, 48], [1078, 64], 
+                 [1258, 16], [1258, 24], [1258, 32], [1258, 48], [1258, 64],
+                 [1437, 16], [1437, 24], [1437, 32], [1437, 48], [1437, 64],
+                 [1617, 16], [1617, 24], [1617, 32], [1617, 48], [1617, 64],
+                 [1792, 8], [1792, 16], [1792, 24], [1792, 32], [1792, 48], [1792, 64]]
     else:
         raise ValueError('Unknown workflow name: %s' % wf_name)
     
@@ -197,33 +196,41 @@ if __name__ == '__main__':
     perfmodel1 = DistPerfModel(1, 'stage1')
     perfmodel2 = DistPerfModel(2, 'stage2')
     perfmodel3 = DistPerfModel(3, 'stage3')
-    models = [perfmodel0, perfmodel1, perfmodel2, perfmodel3]
-    # pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/ML-Pipeline_profile.json'
-    pro_file = '/home/ubuntu/workspace/serverless-bound/profiles/ML-Pipeline_profile_dist.json'
-    perfmodel0.update_allow_parallel(False)
-    perfmodel3.update_allow_parallel(False)
+    perfmodel4 = DistPerfModel(4, 'stage4')
+    perfmodel5 = DistPerfModel(5, 'stage5')
+    perfmodel6 = DistPerfModel(6, 'stage6')
+    perfmodel7 = DistPerfModel(7, 'stage7')
+    models = [perfmodel0, perfmodel1, perfmodel2, perfmodel3, 
+                perfmodel4, perfmodel5, perfmodel6, perfmodel7]
+    pro_file = '/home/ubuntu/workspace/chaojin-dev/serverless-bound/profiles/tpcds-dsq95_profile.json'
+    perfmodel1.update_allow_parallel(False)
+    perfmodel7.update_allow_parallel(False)
     
-    perfmodel3.up_models.append(perfmodel2)
-    perfmodel2.up_models.append(perfmodel1)
+    perfmodel7.up_models.append(perfmodel6)
+    perfmodel6.up_models.append(perfmodel4)
+    perfmodel6.up_models.append(perfmodel5)
+    perfmodel4.up_models.append(perfmodel3)
+    perfmodel4.up_models.append(perfmodel2)
+    perfmodel4.up_models.append(perfmodel1)
     perfmodel1.up_models.append(perfmodel0)
+
+    config_pairs = get_config_pairs_dist('tpcds/dsq95')
     
     for m in models:
         m.train(pro_file)
         
-    perfmodel0.set_func_size(3.)
-    perfmodel1.set_func_size(3.)
-    perfmodel2.set_func_size(3.)
-    perfmodel3.set_func_size(3.)
+    perfmodel0.set_func_size(20.*0.5)
+    perfmodel1.set_func_size(1.*0.5)
+    perfmodel2.set_func_size(20.*0.5)
+    perfmodel3.set_func_size(4.*0.5)
+    perfmodel4.set_func_size(4.*0.5)
+    perfmodel5.set_func_size(4.*0.5)
+    perfmodel6.set_func_size(4.*0.5)
+    perfmodel7.set_func_size(1.*0.5)
 
     t0 = time.time()
-    dist = perfmodel3.calculate()
+    dist = perfmodel7.calculate()
     t1 = time.time()
-    
-    print('Time cost: %f' % (t1 - t0))
-    percentile = 0.8
-    print(dist.tail_value(percentile))
-    
-    with open(pro_file, 'r') as f:
-        profile = json.load(f)
+    print(dist)
         
-    print(sorted(list(perfmodel1.distributions.keys())))
+    # print(sorted(list(perfmodel7.distributions.keys())))

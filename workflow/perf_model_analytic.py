@@ -120,9 +120,9 @@ class AnaPerfModel:
         self.comp_params = self.fit_params(size2points_comp, comp_func)
         self.write_params = self.fit_params(size2points_write, io_func)
         
-        target_dict = size2points_comp
-        arr_x = list(target_dict.keys())
-        self.visualize(arr_x, [target_dict[x] for x in arr_x], io_func, self.comp_params)
+        # target_dict = size2points_comp
+        # arr_x = list(target_dict.keys())
+        # self.visualize(arr_x, [target_dict[x] for x in arr_x], io_func, self.comp_params)
         
     def get_params(self):
         a = sum([self.read_params[0], self.comp_params[0], self.write_params[0]])

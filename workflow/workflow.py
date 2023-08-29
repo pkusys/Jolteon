@@ -483,7 +483,7 @@ class Workflow:
                     stage.perf_model.add_up_model(p.perf_model)
         
         t1 = time.time()
-        print('Training time:', t1 - t0, 's')
+        print('Training time:', t1 - t0, 's\n')
 
     def find_paths(self):
         paths = []
@@ -528,7 +528,8 @@ class Workflow:
                 for stage in path:
                     tmp_latency += stage.perf_model.predict(stage.config['memory']/1792, 
                                                             stage.num_func, mode, 
-                                                            parent_d=parent_d)
+                                                            parent_d=parent_d,
+                                                            cold_percent=60)
                     parent_d = stage.num_func
                 if paths.index(path) == 0:
                     latency = tmp_latency
@@ -546,7 +547,8 @@ class Workflow:
                             break
                 cost += stage.perf_model.predict(stage.config['memory']/1792,
                                                  stage.num_func, mode,
-                                                 parent_d=parent_d)
+                                                 parent_d=parent_d,
+                                                 cold_percent=0)
             return cost
 
     def store_params(self):
@@ -563,7 +565,14 @@ class Workflow:
         return param_path
 
     def get_params(self):
-        res = np.concatenate([stage.perf_model.params() for stage in self.stages])
+        # calibration
+        if self.workflow_name == 'ML-Pipeline':
+            cold_percent = 60
+        elif self.workflow_name == 'Video-Analytics':
+            cold_percent = 85
+        elif self.workflow_name == 'tpcds/dsq95':
+            cold_percent = 75
+        res = np.concatenate([stage.perf_model.params(cold_percent) for stage in self.stages])
         res = res.tolist()
         return res
 
@@ -598,16 +607,21 @@ class Workflow:
         # print(res.shape[0])
         return res
     
-    def update_workflow_config(self, mem_list, parall_list):
+    def update_workflow_config(self, mem_list, parall_list, real=True):
         assert isinstance(parall_list, list) and isinstance(mem_list, list)
         assert len(parall_list) == len(mem_list)
         assert len(parall_list) == len(self.stages)
 
         ret = []
         
-        for i in range(len(self.stages)):
-            r = self.stages[i].update_config(mem_list[i], parall_list[i])
-            ret.append(r)
+        if real:
+            for i in range(len(self.stages)):
+                r = self.stages[i].update_config(mem_list[i], parall_list[i])
+                ret.append(r)
+        else:
+            for i in range(len(self.stages)):
+                self.stages[i].config['memory'] = mem_list[i]
+                self.stages[i].num_func = parall_list[i]
         
         check = True
         for r in ret:
@@ -633,17 +647,11 @@ class Workflow:
         meta_dir = os.path.join(meta_dir, meta_type + '/')
         if meta_type == 'profiles':
             meta_type = 'profile'
-            # if self.perf_model_type == PerfModel.Distribution.value:
-            #     meta_type = 'profile_dist'
-            # elif self.perf_model_type == PerfModel.Analytical.value:
-            #     meta_type = 'profile_analytic'
-            # elif self.perf_model_type == PerfModel.Jolteon.value:
-            #     meta_type = 'profile_jolteon'
         meta_path = self.workflow_name + '_' + meta_type + '.json'
         meta_path = meta_path.replace('/', '-')
         meta_path = os.path.join(meta_dir, meta_path)
-        if not os.path.exists(meta_path):
-            raise Exception('Path does not exist')
+        # if not os.path.exists(meta_path):
+        #     raise Exception('Path does not exist: ' + meta_path)
         return meta_path
     
     '''
@@ -719,7 +727,7 @@ class Workflow:
                 s += func2_def
                 for stage in secondary_path:
                     s += stage.perf_model.generate_func_code(cons_mode, var, param, 
-                                                            parent_ids[stage.stage_id], solver_type) + ' + '
+                                                             parent_ids[stage.stage_id], solver_type) + ' + '
                 s = s[:-3]
                 s += bound + '\n\n'
         else:
@@ -762,147 +770,3 @@ class Workflow:
     
     def __del__(self):
         pass
-
-
-if __name__ == '__main__':
-    test_mode = 'perf_model' # 'step_by_step' 'lazy' 'perf_model'
-    
-    if test_mode == 'step_by_step':
-        wf = Workflow( './tpcds-dsq95.json')
-        stage = wf.stages[0]
-        stage.num_func = 16
-        
-        stage = wf.stages[1]
-        stage.num_func = 1
-        
-        stage = wf.stages[2]
-        stage.num_func = 16
-        
-        stage = wf.stages[3]
-        stage.num_func = 16
-        
-        stage = wf.stages[4]
-        stage.num_func = 16
-        
-        stage = wf.stages[5]
-        stage.num_func = 16
-        
-        stage = wf.stages[6]
-        stage.num_func = 16
-        
-        stage = wf.stages[0]
-        print(wf.workflow_name, stage)
-        stage.status = Status.RUNNING
-        stage.num_func = 64
-        
-        t1 = time.time()
-        thread = MyThread(target=stage.execute, args=None)
-        thread.start()
-        thread.join()
-        res = thread.result
-        # res = stage.execute()
-        t2 = time.time()
-        print('Number of functions:', stage.num_func)
-        print(t2 - t1)
-        for idx, result in enumerate(res):
-            if idx == 0:
-                continue
-            rd = json.loads(result[0])
-            print(rd)
-            if 'statusCode' not in rd:
-                print(rd)
-            rd = json.loads(rd['body'])
-            print(rd['breakdown'])
-            
-        print('\n\n')
-        wf.close_pools()
-    elif test_mode == 'lazy':
-        wf = Workflow( './Video-analytics.json')
-        wf.stages[0].num_func = 4
-        wf.stages[1].num_func = 4
-        wf.stages[2].num_func = 4
-        wf.stages[3].num_func = 4
-        
-        # wf.stages[0].status = Status.RUNNING
-        # wf.stages[0].execute()
-        # wf = Workflow( './tpcds-dsq95.json')
-        # wf.stages[0].num_func = 20
-        # wf.stages[1].num_func = 1
-        # wf.stages[2].num_func = 20
-        # wf.stages[3].num_func = 20
-        # wf.stages[4].num_func = 20
-        # wf.stages[5].num_func = 20
-        # wf.stages[6].num_func = 20
-        # wf.stages[7].num_func = 1
-        for stage in wf.stages:
-            print(str(stage.stage_id) + ':' + str(stage.num_func), end=' ')
-        print()
-        t1 = time.time()
-        res = wf.lazy_execute()
-        t2 = time.time()
-        print('Time:', t2 - t1)
-        print(res)
-        infos = []
-        time_list = []
-        times_list = []
-        for ids, r in enumerate(res):
-            l = []
-            for ids_, result in enumerate(r):
-                if ids_ == 0:
-                    time_list.append(result)
-                    continue
-                info = extract_info_from_log(result[1])
-                infos.append(info)
-                
-                rd = json.loads(result[0])
-                if 'statusCode' not in rd:
-                    print(rd)
-                rd = json.loads(rd['body'])
-                l.append(rd['breakdown'])
-            times_list.append(l)
-        cost = 0
-        for info in infos:
-            cost += info['bill']
-        print('Cost:', cost, '$')
-        for idx, t in enumerate(time_list):
-            print('Stage', idx, 'time:', t)
-            print(times_list[idx])
-        print('Idea DAG Execution Time:', time_list[0] + time_list[1]\
-              + time_list[2] + time_list[3])
-        print('\n\n')
-        wf.close_pools()
-    elif test_mode == 'perf_model':
-        # wf = Workflow('./tpcds-dsq95.json')
-        wf = Workflow('./ML-pipeline.json', 0)
-        # p = wf.profile(5)
-        # print(p)
-        p = '../profiles/ML-Pipeline_profile.json'
-        wf.train_perf_model(p)
-
-        param_path = wf.store_params()
-        t0 = time.time()
-        sample_path = wf.sample_offline(10000)
-        t1 = time.time()
-        print('Sample time:', t1-t0, 's\n\n')
-
-        func_path = 'funcs.py'
-        wf.generate_func_code(func_path, wf.critical_path, wf.secondary_path, 
-                              cons_mode='latency')
-
-        # Test solver
-        t0 = time.time()
-        from funcs import objective_func, constraint_func
-        if wf.secondary_path is not None:
-            from funcs import constraint_func_2 
-        bound = 35
-        obj_params = wf.load_params(param_path)
-        cons_params = wf.load_params(sample_path)
-        solver = PCPSolver(2*len(wf.stages), objective_func, constraint_func, 
-                           bound, obj_params, cons_params)
-        solver.solve()
-        t1 = time.time()
-        print('Solver time:', t1-t0, 's\n\n')
-
-        wf.close_pools()
-    else:
-        raise NotImplementedError

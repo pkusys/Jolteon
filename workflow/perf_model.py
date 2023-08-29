@@ -22,20 +22,20 @@ def get_config_pairs(wf_name):
                     [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
                     [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
-    elif wf_name == 'tpcds/dsq95':
-        pairs = [[1024, 8], [1024, 16], [1024, 32], 
-                    [1792, 4], [1792, 8], [1792, 16], [1792, 32],
-                    [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
-                    [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
-                    [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
-                    [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
     elif wf_name == 'Video-Analytics':
-        pairs = [[1024, 8], [1024, 16], [1024, 32], 
-                    [1792, 4], [1792, 8], [1792, 16], [1792, 32],
+        pairs = [[1792, 4], [1792, 8], [1792, 16], [1792, 32],
                     [3584, 4], [3584, 8], [3584, 16], [3584, 32], 
                     [5120, 4], [5120, 8], [5120, 16], [5120, 32], 
                     [6144, 4], [6144, 8], [6144, 16], [6144, 32], 
-                    [7168, 4], [7168, 8], [7168, 16], [7168, 32]]
+                    [7168, 4], [7168, 8], [7168, 16], [7168, 32], 
+                    [8960, 4], [8960, 8], [8960, 16], [8960, 32]]
+    elif wf_name == 'tpcds/dsq95':
+        pairs = [[892, 16], [892, 24], [892, 32], [892, 48], [892, 64], 
+                 [1078, 16], [1078, 24], [1078, 32], [1078, 48], [1078, 64], 
+                 [1258, 16], [1258, 24], [1258, 32], [1258, 48], [1258, 64],
+                 [1437, 16], [1437, 24], [1437, 32], [1437, 48], [1437, 64],
+                 [1617, 16], [1617, 24], [1617, 32], [1617, 48], [1617, 64],
+                 [1792, 8], [1792, 16], [1792, 24], [1792, 32], [1792, 48], [1792, 64]]
     else:
         raise ValueError('Unknown workflow name: %s' % wf_name)
     
@@ -256,9 +256,9 @@ class StagePerfModel:
             err = (y_pred - y_actual) / y_actual
             s_err = np.mean(np.abs(err))
             m_err = np.mean(err)
-            print('\nStage Error:', err)
-            print('Stage abs mean error:', s_err)
-            print('Stage mean error:', m_err)
+            # print('Stage Error:', err)
+            print('Stage {} mean abs error:'.format(self.stage_id), '%.2f'%(s_err*100), '%')
+            print('Stage {} mean error:'.format(self.stage_id), '%.2f'%(m_err*100), '%')
             
         else:
             # k is the vCPU allocation
@@ -350,106 +350,13 @@ class StagePerfModel:
             err = (y_pred - y_actual) / y_actual
             s_err = np.mean(np.abs(err))
             m_err = np.mean(err)
-            print('\nStage Error:', err)
-            print('Stage abs mean error:', s_err)
-            print('Stage mean error:', m_err)
+            # print('Stage Error:', err)
+            print('Stage {} mean abs error:'.format(self.stage_id), '%.2f'%(s_err*100), '%')
+            print('Stage {} mean error:'.format(self.stage_id), '%.2f'%(m_err*100), '%')
         
-        print('\n\n')
+        print()
 
-    # private method
-    def __visualize(self, profile_path) -> None:
-        assert isinstance(profile_path, str) and profile_path.endswith('.json')
-        profile = None
-        with open(profile_path, 'r') as f:
-            profile = json.load(f)
-        assert isinstance(profile, dict) and self.stage_name in profile
-        stage_profile = profile[self.stage_name]
-        assert isinstance(stage_profile, dict) and 'cold' in stage_profile and \
-            'read' in stage_profile and 'compute' in stage_profile and \
-            'write' in stage_profile
-        
-        y_s = np.array(stage_profile['cold'])
-        num_epochs = y_s.shape[0]
-        assert num_epochs >= 2  
-        num_epochs -= 1  # Remove the first cold start epoch
-        y_s = y_s[1:][:,:,0].reshape(-1)  # Only consider warm start
-        self.cold_params_avg = y_s
-
-        y_r = np.array(stage_profile['read'])[1:][:,:,0].reshape(-1)  # Only use the average time data
-        y_c = np.array(stage_profile['compute'])[1:][:,:,0].reshape(-1)
-        y_w = np.array(stage_profile['write'])[1:][:,:,0].reshape(-1)
-
-        d = np.array([num_func for mem, num_func in config_pairs]*num_epochs)
-        kd = np.array([eq_vcpu_alloc(mem, num_func) for mem, num_func in config_pairs]*num_epochs)
-        popt1, pcov1 = scipy_opt.curve_fit(io_func, kd, y_r)
-        popt2, pcov2 = scipy_opt.curve_fit(comp_func, d, y_c)
-        popt3, pcov3 = scipy_opt.curve_fit(io_func, kd, y_w)
-
-        num_samples = 2000
-
-        ps1 = np.random.multivariate_normal(popt1, pcov1, num_samples)
-        ps2 = np.random.multivariate_normal(popt2, pcov2, num_samples)
-        ps3 = np.random.multivariate_normal(popt3, pcov3, num_samples)
-        y_1_l = []
-        y_2_l = []
-        y_3_l = []
-
-        x = np.linspace(0.9, 32, 100)
-
-        f = 0.1
-
-        y_1 = io_func(x, popt1[0], popt1[1])
-        for i in range(num_samples):
-            y_1_l.append(io_func(x, ps1[i][0], ps1[i][1]))
-        y_1_l = np.array(y_1_l)
-        
-        y_2 = comp_func(x, popt2[0], popt2[1], popt2[2], popt2[3])
-        for i in range(num_samples):
-            y_2_l.append(comp_func(x, ps2[i][0], ps2[i][1], ps2[i][2], ps2[i][3]))
-        y_2_l = np.array(y_2_l)
-        
-        y_3 = io_func(x, popt3[0], popt3[1])
-        for i in range(num_samples):
-            y_3_l.append(io_func(x, ps3[i][0], ps3[i][1]))
-        y_3_l = np.array(y_3_l)
-        
-        y_p = y_1 + y_2 + y_3 + np.mean(y_s, axis=0)
-        y_l = y_1_l + y_2_l + y_3_l + np.mean(y_s, axis=0)
-
-        y_1_d = io_func(kd, popt1[0], popt1[1])
-        y_2_d = comp_func(d, popt2[0], popt2[1], popt2[2], popt2[3])
-        y_3_d = io_func(kd, popt3[0], popt3[1])
-
-        y_d = y_1_d + y_2_d + y_3_d + y_s
-        y_ = y_r + y_c + y_w + y_s
-        err = (y_d - y_) / y_
-        print('Error:', err)
-        print('Mean Abs Error:', np.mean(np.abs(err)))
-        print('Mean Error:', np.mean(err))
-
-        font_size = 20
-        plt.rc('font',**{'size': font_size})
-        fig_size = (10, 6)
-        fig, axes = plt.subplots(nrows=1, ncols=1, sharey=False, figsize=fig_size)
-
-        mode = 'time' # 'error' or 'time'
-        if mode == 'error':
-            axes.scatter(kd, err*100)
-            axes.set_ylabel('Error (%)')
-        else:
-            s = axes.scatter(kd, y_, zorder=3, label='samples')
-            l0, = axes.plot(x, y_p, 'r', label='pred_mean')
-            for i in range(num_samples):
-                l1, = axes.plot(x, y_l[i], 'darkorange', label='pred w/ cov', alpha=0.1, zorder=1)
-            fig.legend(handles=[s, l0, l1], ncol=3, loc='upper center', bbox_to_anchor=(0.5, 1.0), fontsize=font_size)
-            axes.set_ylabel('Time (s)')
-        axes.set_xlabel('k*d (eq vCPU)')
-        plt.savefig('tmp.png')
-    
-    def visualize(self, profile_path) -> None:
-        self.__visualize(profile_path)
-
-    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0) -> float:
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=60) -> float:
         # input_size uses MB as unit
         assert num_vcpu > 0 and num_vcpu <= 10
         assert num_func > 0
@@ -471,15 +378,15 @@ class StagePerfModel:
         params = self.params()
         pred = np.dot(params[1:], x)
         if mode == 'latency':
-            pred += params[0]
+            pred += np.percentile(self.cold_params_avg, cold_percent)
             return pred
         else:
             # 1792 / 1024 * 0.0000000167 * 1000
-            pred += params[0]
+            # pred += np.percentile(self.cold_params_avg, cold_percent)
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
 
-    def params(self):
-        cold_coeff = np.percentile(self.cold_params_avg, 70)
+    def params(self, cold_percent=60):
+        cold_coeff = np.percentile(self.cold_params_avg, cold_percent)
         res = np.array([cold_coeff, self.x_coeff, self.kd_d_coeff, self.logx_coeff,
                         self.x2_coeff, self.const_coeff])
         return res
@@ -489,7 +396,7 @@ class StagePerfModel:
         # Sample for num_samples times
         res = {'cold': [], 'read': [], 'compute': [], 'write': []}
         # seed_val = int(time.time())
-        seed_val = 31729  # Great magic number!
+        seed_val = 0
         rng = np.random.default_rng(seed=seed_val)
         res['cold'] = rng.choice(self.cold_params_avg, num_samples)
         res['read'] = rng.multivariate_normal(self.read_params_avg, self.read_cov_avg, 
@@ -583,7 +490,7 @@ class StagePerfModel:
             # 1792 / 1024 * 0.0000000167 * 1000 = 0.000029225 
             # 1000 is to convert from ms to s
             # We multiply 1e5 to the cost to make it more readable
-            s = cold_param + ' + ' + s
+            # s = cold_param + ' / 2 + ' + s
             s = '(' + s + ') * ' + var_k + ' * ' + var_d + ' * 2.9225 + 0.02 * ' + var_d
         return s
 

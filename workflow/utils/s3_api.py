@@ -27,7 +27,14 @@ def clear_data(dir: str):
     if len(objects_to_delete) > 0:
         response = bucket.delete_objects(Delete={'Objects': objects_to_delete})
         if 'Errors' in response:
-            raise Exception(response['Errors'])
+            cnt = 0
+            while True:
+                if cnt >= 3:
+                    raise Exception(response['Errors'])
+                response = bucket.delete_objects(Delete={'Objects': objects_to_delete})
+                if 'Errors' not in response:
+                    break
+                cnt += 1
         
 if __name__ == '__main__':
     # res = get_dir_size('tpcds/dsq95/stage0/intermediate')
