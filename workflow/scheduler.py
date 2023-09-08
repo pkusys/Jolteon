@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import boto3
+import os
 import utils
 import time
 import json
@@ -153,11 +154,14 @@ class Jolteon(Scheduler):
         sample_path = self.workflow.sample_offline(self.max_sample_size)
         return param_path, sample_path
     
-    def get_params_and_samples(self):
+    def get_params_and_samples(self, sample_size=None):
         t0 = time.time()
         self.obj_params = self.workflow.get_params()
         num_samples = PCPSolver.sample_size(len(self.workflow.stages), 
                                             self.risk, 0, self.confidence_error)
+        if sample_size is not None:
+            assert isinstance(sample_size, int) and sample_size > 0
+            num_samples = sample_size
         self.cons_params = self.workflow.sample_online(num_samples)
         t1 = time.time()
         print('Sample size:', num_samples)
@@ -226,7 +230,7 @@ class Jolteon(Scheduler):
                                 need_probe=self.need_probe, probe_depth=self.probe_depth)
         res = self.solver.iter_solve(init_vals, x_bound)
         t1 = time.time()
-        print('Final bound:', self.solver.bound)
+        # print('Final bound:', self.solver.bound)
         print(res)
         print('Solve time:', t1-t0, 's\n')
 
@@ -258,6 +262,33 @@ class Jolteon(Scheduler):
     def set_config(self, real=True):
         mem_list = [int(self.num_vcpus[i]*1792) for i in range(len(self.num_vcpus))]
         self.workflow.update_workflow_config(mem_list, self.num_funcs, real)
+
+    def predict(self, file_path='./config.json'):
+        # Assume the functions have been generated
+        from funcs import objective_func, constraint_func
+        if self.workflow.secondary_path is not None:
+            from funcs import constraint_func_2 
+
+        self.solver = PCPSolver(2*len(self.workflow.stages), objective_func, constraint_func, 
+                                self.bound, self.obj_params, self.cons_params, 
+                                risk=self.risk, confidence_error=self.confidence_error,
+                                ftol=self.ftol, k_configs=self.vcpu_configs, d_configs=self.parallel_configs, 
+                                bound_type=self.bound_type, 
+                                need_probe=self.need_probe, probe_depth=self.probe_depth)
+        
+        with open(file_path, 'r') as f:
+            config = json.load(f)
+        num_funcs = config['num_funcs']
+        num_vcpus = config['num_vcpus']
+        # Assert the config has been rounded and checked
+
+        lat95, cost95 = self.solver.get_vals(num_funcs, num_vcpus, 95)
+        lat50, cost50 = self.solver.get_vals(num_funcs, num_vcpus, 50)
+        
+        print('Predicted 95-tile latency:', lat95)
+        print('Predicted 95-tile cost:', cost95)
+        print('Predicted 50-tile latency:', lat50)
+        print('Predicted 50-tile cost:', cost50)
 
 class Caerus(Scheduler):
     def __init__(self, workflow: Workflow, storage_mode = 's3'):
@@ -408,6 +439,10 @@ class Orion(Caerus):
                 dist.combine(tmp_dist, 1)
                 
         return dist
+
+    def predict_tile(self, config_list, tile):
+        dist = self.get_distribution(config_list)
+        return dist.tail_value(tile)
 
 class Ditto(Scheduler):
     def __init__(self, workflow: Workflow, storage_mode = 's3'):
@@ -701,9 +736,14 @@ def main():
     parser.add_argument('-c', '--confidence', type=float, default=0.999, help='confidence')
     parser.add_argument('-p', '--profile', type=int, default=0, help='profile or not, 0 or 1')
     parser.add_argument('-t', '--train', type=int, default=0, help='train or not, 0 or 1')
+    parser.add_argument('-a', '--accuracy_predict', type=int, default=0, help='test prediction accuracy, 0 or 1')
+    parser.add_argument('-as', '--accuracy_stage', type=int, default=0, help='accuracy prediction for one stage, 0 or 1')
+    parser.add_argument('-sid', '--stage_id', type=int, default=-1, help='stage id, used by accuracy prediction of one stage')
     parser.add_argument('-tp', '--total_parallelism', type=int, default=40, help='total parallelism, used by baselines')
     parser.add_argument('-nv', '--num_vcpu', type=float, default=1, help='number of vcpus per function, used by ditto and caerus')
     parser.add_argument('-f', '--config_file', type=int, default=0, help='read existing config file for orion')
+    parser.add_argument('-r', '--real_run', type=int, default=1, help='real run or not, 1 or 0')
+    parser.add_argument('-ss', '--sample_size', type=int, default=0, help='sample size, used by jolteon')
 
     args = parser.parse_args()
 
@@ -739,8 +779,82 @@ def main():
         if args.scheduler == 'jolteon':
             scheduler = Jolteon(wf)
             scheduler.store_params_and_samples()
+    elif args.accuracy_predict == 1:
+        wf.train_perf_model(wf.metadata_path('profiles'))
+        if args.scheduler == 'jolteon':
+            scheduler = Jolteon(wf)
+            scheduler.set_bound(args.bound_type, args.bound_value, args.service_level)
+            scheduler.set_confidence(args.confidence)
+            scheduler.generate_func_code()
+
+            sample_size = args.sample_size
+            assert sample_size > 0
+            scheduler.get_params_and_samples(sample_size)
+            # Assert the configs has been written to ./config.json
+            if not os.path.exists('./config.json'):
+                config = dict()
+                config['num_funcs'] = [16, 32, 8, 16]
+                config['num_vcpus'] = [2, 1.5, 1.5, 1.5]
+                with open('./config.json', 'w') as f:
+                    json.dump(config, f)
+                raise ValueError('Please write the configs to ./config.json')
+            scheduler.predict()
+        elif args.scheduler == 'orion':
+            scheduler = Orion(wf)
+            assert args.bound_type == 'latency'
+            if not os.path.exists('./config.json'):
+                config = dict()
+                config['num_funcs'] = [16, 32, 8, 16]
+                config['num_vcpus'] = [2, 1.5, 1.5, 1.5]
+                with open('./config.json', 'w') as f:
+                    json.dump(config, f)
+                raise ValueError('Please write the configs to ./config.json')
+            with open('./config.json', 'r') as f:
+                config = json.load(f)
+                num_funcs = config['num_funcs']
+                num_funcs = (np.array(num_funcs) * 1792).tolist()
+                scheduler.num_funcs = num_funcs
+                num_vcpus = config['num_vcpus']
+            lat95 = scheduler.predict_tile(num_vcpus, 0.95)
+            lat50 = scheduler.predict_tile(num_vcpus, 0.5)
+            print('Predicted 95-tile latency:', lat95)
+            print('Predicted 50-tile latency:', lat50)
+        elif args.scheduler == 'ditto':
+            scheduler = Ditto(wf)
+            if not os.path.exists('./config.json'):
+                config = dict()
+                config['num_funcs'] = [16, 32, 8, 16]
+                config['num_vcpus'] = [2, 1.5, 1.5, 1.5]
+                with open('./config.json', 'w') as f:
+                    json.dump(config, f)
+                raise ValueError('Please write the configs to ./config.json')
+            with open('./config.json', 'r') as f:
+                config = json.load(f)
+                num_funcs = config['num_funcs']
+                scheduler.num_funcs = num_funcs
+                for idx, stage in enumerate(scheduler.workflow.stages):
+                    stage.num_func = num_funcs[idx]
+            lat = scheduler.workflow.predict()
+            print('Predicted latency:', lat)
+    elif args.accuracy_stage == 1:
+        wf.train_perf_model(wf.metadata_path('profiles'))
+        config = [3584, 8]
+        if args.scheduler == 'jolteon':
+            stage_id = args.stage_id
+            assert stage_id >= 0 and stage_id < len(wf.stages)
+
+            wf.stages[stage_id].perf_model.predict_tile(config, wf.metadata_path('profiles'), args.sample_size, 95)
+            wf.stages[stage_id].perf_model.predict_tile(config, wf.metadata_path('profiles'), args.sample_size, 50)
+        elif args.scheduler == 'orion':
+            pass
+        elif args.scheduler == 'ditto':
+            stage_id = args.stage_id
+            assert stage_id >= 0 and stage_id < len(wf.stages)
+
+            wf.stages[stage_id].perf_model.predict_tile(config, wf.metadata_path('profiles'), args.sample_size)
     else:
         wf.train_perf_model(wf.metadata_path('profiles'))
+        real_run = True if args.real_run == 1 else False
         if args.scheduler == 'jolteon':
             scheduler = Jolteon(wf)
             scheduler.set_bound(args.bound_type, args.bound_value, args.service_level)
@@ -779,12 +893,16 @@ def main():
                 x_bound = [(8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1), (8, 48), (0.49, 1.1), (4, 16), (0.49, 1.1),
                            (8, 48), (0.49, 1.1), (4, 8), (0.49, 1.1), (8, 48), (0.49, 1.1), (1, 2), (0.49, 1.1)]
 
-            scheduler.get_params_and_samples()
+            sample_size = args.sample_size
+            if sample_size == 0:
+                scheduler.get_params_and_samples()
+            else:
+                scheduler.get_params_and_samples(sample_size)
             t0 = time.time()
             scheduler.search_config(x_bound=x_bound, init_vals=x_init)
             t1 = time.time()
             print('Search time:', t1-t0, 's\n')
-            scheduler.set_config()
+            scheduler.set_config(real_run)
         
         elif args.scheduler == 'orion':
             init_mem = None
@@ -824,40 +942,41 @@ def main():
             print(scheduler.parallelism_ratio)
             print(scheduler.num_funcs)
         
-        wf.init_stage_status()
-        clear_dir = wf.workflow_name + '/stage'
-        clear_dir = clear_dir.replace('-', '_')
-        clear_data(clear_dir)
-        t0 = time.time()
-        res = wf.lazy_execute()
-        t1 = time.time()
-        print('Time:', t1 - t0)
-        # print(res)
-        infos = []
-        time_list = []
-        times_list = []
-        for ids, r in enumerate(res):
-            l = []
-            for ids_, result in enumerate(r):
-                if ids_ == 0:
-                    time_list.append(result)
-                    continue
-                info = extract_info_from_log(result[1])
-                infos.append(info)
-                
-                rd = json.loads(result[0])
-                if 'statusCode' not in rd:
-                    print(rd)
-                rd = json.loads(rd['body'])
-                l.append(rd['breakdown'])
-            times_list.append(l)
-        cost = 0
-        for info in infos:
-            cost += info['bill']
-        print('Cost:', cost, '$')
-        for idx, t in enumerate(time_list):
-            print('Stage', idx, 'time:', t)
-            print(times_list[idx])
+        if real_run:
+            wf.init_stage_status()
+            clear_dir = wf.workflow_name + '/stage'
+            clear_dir = clear_dir.replace('-', '_')
+            clear_data(clear_dir)
+            t0 = time.time()
+            res = wf.lazy_execute()
+            t1 = time.time()
+            print('Time:', t1 - t0)
+            # print(res)
+            infos = []
+            time_list = []
+            times_list = []
+            for ids, r in enumerate(res):
+                l = []
+                for ids_, result in enumerate(r):
+                    if ids_ == 0:
+                        time_list.append(result)
+                        continue
+                    info = extract_info_from_log(result[1])
+                    infos.append(info)
+                    
+                    rd = json.loads(result[0])
+                    if 'statusCode' not in rd:
+                        print(rd)
+                    rd = json.loads(rd['body'])
+                    l.append(rd['breakdown'])
+                times_list.append(l)
+            cost = 0
+            for info in infos:
+                cost += info['bill']
+            print('Cost:', cost, '$')
+            for idx, t in enumerate(time_list):
+                print('Stage', idx, 'time:', t)
+                print(times_list[idx])
         
     wf.close_pools()
 

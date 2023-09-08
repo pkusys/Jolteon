@@ -382,8 +382,57 @@ class StagePerfModel:
             return pred
         else:
             # 1792 / 1024 * 0.0000000167 * 1000
-            # pred += np.percentile(self.cold_params_avg, cold_percent)
             return (pred * num_func * num_vcpu * 2.9225  + 0.02 * num_func) / 100000
+
+    def predict_tile(self, config, profile_path, num_samples, tile=95):
+        mem, num_func = config  # Note that the config should be in config_pairs
+        assert config in config_pairs
+        num_vcpu = mem / 1792
+        assert num_vcpu > 0 and num_vcpu <= 10
+        assert num_func > 0
+
+        kd = eq_vcpu_alloc(mem, num_func)
+        d = num_func
+        x = [1.0/d, 1.0/kd, np.log(d)/d, 1.0/d**2, 1.0]
+
+        # Only used for allow_parallel stages
+        if self.can_intra_parallel[1]:
+            x[2] = np.log(kd)/kd
+            x[3] = 1.0/kd**2
+        
+        sample_params = self.sample_offline(num_samples)
+        preds = []
+        for i in range(num_samples):
+            preds.append(np.dot(sample_params[i][1:], x) + sample_params[i][0])
+        pred = np.percentile(np.array(preds), tile)
+
+        with open(profile_path, 'r') as f:
+            profile = json.load(f)
+        assert isinstance(profile, dict) and self.stage_name in profile
+        stage_profile = profile[self.stage_name]
+        assert isinstance(stage_profile, dict) and 'cold' in stage_profile and \
+            'read' in stage_profile and 'compute' in stage_profile and \
+            'write' in stage_profile
+        y_s = np.array(stage_profile['cold'])
+        num_epochs = y_s.shape[0]
+        assert num_epochs >= 2
+        num_epochs -= 1  # Remove the first cold start epoch
+        y_s = y_s[1:][:,:,0]
+        y_r = np.array(stage_profile['read'])[1:][:,:,0]
+        y_c = np.array(stage_profile['compute'])[1:][:,:,0]
+        y_w = np.array(stage_profile['write'])[1:][:,:,0]
+
+        cfg_idx = config_pairs.index(config)
+
+        actuals = []
+        for i in range(num_epochs):
+            y = y_s[i][cfg_idx] + y_r[i][cfg_idx] + y_c[i][cfg_idx] + y_w[i][cfg_idx]
+            actuals.append(y)
+        actuals = np.array(actuals)
+        
+        actual = np.percentile(actuals, tile)
+        err = (pred - actual) / actual
+        print('Predicted', tile, err)
 
     def params(self, cold_percent=60):
         cold_coeff = np.percentile(self.cold_params_avg, cold_percent)

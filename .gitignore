@@ -196,4 +196,5 @@ samples/*
 params/*
 funcs.py
 orion_config.json
+config.json
 **/data/*
