@@ -17,7 +17,7 @@ python3 -u scheduler.py -w tpcds -p 1 > tmp.log
 
 2. Train
 ```
-python3 -u scheduler.py -w ml -t 1 > tmp1.log
+python3 -u scheduler.py -w ml -t 1 > tmp.log
 python3 -u scheduler.py -w video -t 1 > tmp.log
 python3 -u scheduler.py -w tpcds -t 1 > tmp.log
 ```
@@ -199,4 +199,92 @@ python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 26.1 -tp 40 > tmp.log
 python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 30 -tp 40 > tmp.log
 python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 35 -tp 40 > tmp.log
 python3 -u scheduler.py -w tpcds -s orion -bt latency -bv 60 -tp 40 > tmp.log
+```
+
+## Overhead
+
+Scheduling time
+different workflows, different bound types
+```
+python3 -u scheduler.py -w ml -bt latency -bv 20 -r 0 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 80 -r 0 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 800 -r 0 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 2500 -r 0 > tmp.log
+
+python3 -u scheduler.py -w video -bt latency -bv 12 -r 0 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 80 -r 0 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 920 -r 0 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1800 -r 0 > tmp.log
+
+python3 -u scheduler.py -w tpcds -bt latency -bv 23 -r 0 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 65 -r 0 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1800 -r 0 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 2000 -r 0 > tmp.log
+```
+
+Time v.s. Sample size
+```
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 10000 > tmp.log
+
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 -ss 10000 > tmp.log
+
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 -ss 10000 > tmp.log
+
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 -ss 10000 > tmp.log
+
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 -ss 10000 > tmp.log
+
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 10 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 100 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 1000 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 5000 > tmp.log
+python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 10000 > tmp.log
+```
+
+## Performance model
+
+### Workflow-level
+Video
+```
+python3 -u scheduler.py -w video -a 1 -r 0 -ss 2 > tmp.log
+
+python3 -u scheduler.py -w video -s orion -a 1 -r 0 > tmp.log
+
+python3 -u scheduler.py -w video -s ditto -a 1 -r 0 > tmp.log
+```
+
+## Stage level
+Video, stage 0
+```
+python3 -u scheduler.py -w video -as 1 -sid 0 -r 0 -ss 2 > tmp.log
+
+python3 -u scheduler.py -w video -s orion -as 1 -sid 0 -r 0 > tmp.log
+
+python3 -u scheduler.py -w video -s ditto -as 1 -sid 0 -r 0 > tmp.log
 ```

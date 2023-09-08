@@ -161,6 +161,140 @@ class PCPSolver:
 
         return res
 
+    def probe(self, d_init, k_init):
+        # assume init is within the feasible region
+        d_pos = []
+        k_pos = []
+        d_config = np.array(self.d_configs)
+        k_config = np.array(self.k_configs)
+        for d in d_init:
+            mask = (d_config == d)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                d_pos.append(j)
+        for k in k_init:
+            mask = (k_config == k)
+            if np.any(mask):
+                j = np.where(mask)[0][0]
+                k_pos.append(j)
+        
+        d_pos = np.array(d_pos)
+        k_pos = np.array(k_pos)
+        x_pos = np.zeros(self.num_X, dtype=int)
+        x_pos[0::2] = d_pos
+        x_pos[1::2] = k_pos
+
+        cons_params = np.array(self.cons_params).T
+
+        searched = set()
+
+        need_pos = []
+        if self.need_probe is not None:
+            need_pos = [i for i in range(self.num_X) if self.need_probe[i]]
+
+        def bfs(x_pos, max_depth=4):
+            q = MyQueue()
+            searched.add(tuple(x_pos))
+            q.push([x_pos, 0])
+
+            best_pos = x_pos.copy()
+            best_x = np.zeros(self.num_X)
+            best_x[0::2] = d_config[best_pos[0::2]]
+            best_x[1::2] = k_config[best_pos[1::2]]
+            best_obj = self.objective(best_x, self.obj_params)
+            best_cons = self.constraint(best_x, self.obj_params, self.bound)
+
+            steps = [-1, 1]
+
+            while len(q) > 0:
+                p = q.pop()
+
+                x = np.zeros(self.num_X)
+                x[0::2] = d_config[p[0][0::2]]
+                x[1::2] = k_config[p[0][1::2]]
+                cons = self.constraint(x, cons_params, self.bound)
+                cons = np.percentile(cons, 100 * (1 - self.risk))
+                obj = self.objective(x, self.obj_params)
+                # print('x:', x, 'obj:', obj, 'cons:', cons)
+
+                if best_cons < 0:  # tight bound
+                    if cons < 0 and cons > best_cons and obj < best_obj:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+                else:  # find a feasible solution first
+                    if cons < best_cons:
+                        best_pos = p[0].copy()
+                        best_obj = obj
+                        best_cons = cons
+
+                if p[1] < max_depth:
+                    for t in range(self.num_X):
+                        if len(need_pos) > 0 and t not in need_pos:
+                            continue
+                        if t % 2 == 0:  # d
+                            config = d_config
+                        else:  # k
+                            config = k_config
+                        for s in steps:
+                            new_x_pos = p[0].copy()
+                            new_x_pos[t] += s
+                            if new_x_pos[t] < 0 or new_x_pos[t] >= len(config) or (t % 2 == 0 and new_x_pos[t] == 0):
+                                continue
+                            if tuple(new_x_pos) in searched:
+                                continue
+                            searched.add(tuple(new_x_pos))
+                            q.push([new_x_pos, p[1] + 1])
+
+            return best_pos
+
+        x = np.zeros(self.num_X)
+        x[0::2] = d_config[x_pos[0::2]]
+        x[1::2] = k_config[x_pos[1::2]]
+        cons = self.constraint(x, cons_params, self.bound)
+        cons = np.percentile(cons, 100 * (1 - self.risk))
+        feasible = cons < 0
+        old_x_pos = x_pos.copy()
+        while not feasible:  # find a feasible solution first
+            x_pos = bfs(x_pos, self.probe_depth)
+            if x_pos.tolist() == old_x_pos.tolist():  # no improvement
+                break
+            old_x_pos = x_pos.copy()
+            x = np.zeros(self.num_X)
+            x[0::2] = d_config[x_pos[0::2]]
+            x[1::2] = k_config[x_pos[1::2]]
+            cons = self.constraint(x, self.obj_params, self.bound)
+            cons = self.constraint(x, cons_params, self.bound)
+            cons = np.percentile(cons, 100 * (1 - self.risk))
+            feasible = cons < 0
+        
+        # find the best solution
+        best_pos = bfs(x_pos, self.probe_depth)
+        best_d = d_config[best_pos[0::2]].tolist()
+        best_k = k_config[best_pos[1::2]].tolist()
+
+        return best_d, best_k
+
+    def get_vals(self, d, k, tile=95):
+        assert len(d) == self.num_X // 2
+        assert len(k) == self.num_X // 2
+        x = np.zeros(self.num_X)
+        x[0::2] = d
+        x[1::2] = k
+
+        cons_params = np.array(self.cons_params).T
+
+        obj = self.objective(x, cons_params)
+        obj = np.percentile(obj, tile)
+        cons = self.constraint(x, cons_params, self.bound) + self.bound
+        cons = np.percentile(cons, tile)
+        
+        if self.bound_type == 'latency':
+            return cons, obj
+        else:
+            return obj, cons
+
+    @deprecated
     def probe_parallel(self, d_init, k_init):
         # assume init is within the feasible region
         d_pos = []
@@ -284,141 +418,6 @@ class PCPSolver:
 
         return best_d, best_k
 
-    def probe(self, d_init, k_init):
-        # assume init is within the feasible region
-        d_pos = []
-        k_pos = []
-        d_config = np.array(self.d_configs)
-        k_config = np.array(self.k_configs)
-        for d in d_init:
-            mask = (d_config == d)
-            if np.any(mask):
-                j = np.where(mask)[0][0]
-                d_pos.append(j)
-        for k in k_init:
-            mask = (k_config == k)
-            if np.any(mask):
-                j = np.where(mask)[0][0]
-                k_pos.append(j)
-        
-        d_pos = np.array(d_pos)
-        k_pos = np.array(k_pos)
-        x_pos = np.zeros(self.num_X, dtype=int)
-        x_pos[0::2] = d_pos
-        x_pos[1::2] = k_pos
-
-        cons_params = np.array(self.cons_params).T
-
-        searched = set()
-
-        need_pos = []
-        if self.need_probe is not None:
-            need_pos = [i for i in range(self.num_X) if self.need_probe[i]]
-
-        def bfs(x_pos, max_depth=4):
-            q = MyQueue()
-            searched.add(tuple(x_pos))
-            q.push([x_pos, 0])
-
-            best_pos = x_pos.copy()
-            best_x = np.zeros(self.num_X)
-            best_x[0::2] = d_config[best_pos[0::2]]
-            best_x[1::2] = k_config[best_pos[1::2]]
-            best_obj = self.objective(best_x, self.obj_params)
-            best_cons = self.constraint(best_x, self.obj_params, self.bound)
-
-            steps = [-1, 1]
-
-            while len(q) > 0:
-                p = q.pop()
-
-                x = np.zeros(self.num_X)
-                x[0::2] = d_config[p[0][0::2]]
-                x[1::2] = k_config[p[0][1::2]]
-                cons = self.constraint(x, cons_params, self.bound)
-                cons = np.percentile(cons, 100 * (1 - self.risk))
-                obj = self.objective(x, self.obj_params)
-                # print('x:', x, 'obj:', obj, 'cons:', cons)
-
-                if best_cons < 0:  # tight bound
-                    if cons < 0 and cons > best_cons and obj < best_obj:
-                        best_pos = p[0].copy()
-                        best_obj = obj
-                        best_cons = cons
-                else:  # find a feasible solution first
-                    if cons < best_cons:
-                        best_pos = p[0].copy()
-                        best_obj = obj
-                        best_cons = cons
-
-                if p[1] < max_depth:
-                    for t in range(self.num_X):
-                        if len(need_pos) > 0 and t not in need_pos:
-                            continue
-                        if t % 2 == 0:  # d
-                            config = d_config
-                        else:  # k
-                            config = k_config
-                        for s in steps:
-                            new_x_pos = p[0].copy()
-                            new_x_pos[t] += s
-                            if new_x_pos[t] < 0 or new_x_pos[t] >= len(config) or (t % 2 == 0 and new_x_pos[t] == 0):
-                                continue
-                            if tuple(new_x_pos) in searched:
-                                continue
-                            searched.add(tuple(new_x_pos))
-                            q.push([new_x_pos, p[1] + 1])
-
-            return best_pos
-
-        x = np.zeros(self.num_X)
-        x[0::2] = d_config[x_pos[0::2]]
-        x[1::2] = k_config[x_pos[1::2]]
-        cons = self.constraint(x, cons_params, self.bound)
-        cons = np.percentile(cons, 100 * (1 - self.risk))
-        feasible = cons < 0
-        old_x_pos = x_pos.copy()
-        while not feasible:  # find a feasible solution first
-            x_pos = bfs(x_pos, self.probe_depth)
-            if x_pos.tolist() == old_x_pos.tolist():  # no improvement
-                break
-            old_x_pos = x_pos.copy()
-            x = np.zeros(self.num_X)
-            x[0::2] = d_config[x_pos[0::2]]
-            x[1::2] = k_config[x_pos[1::2]]
-            cons = self.constraint(x, self.obj_params, self.bound)
-            cons = self.constraint(x, cons_params, self.bound)
-            cons = np.percentile(cons, 100 * (1 - self.risk))
-            feasible = cons < 0
-        
-        # find the best solution
-        best_pos = bfs(x_pos, self.probe_depth)
-        best_d = d_config[best_pos[0::2]].tolist()
-        best_k = k_config[best_pos[1::2]].tolist()
-
-        return best_d, best_k
-    
-    def get_vals(self, d, k):
-        assert len(d) == self.num_X // 2
-        assert len(k) == self.num_X // 2
-        x = np.zeros(self.num_X)
-        x[0::2] = d
-        x[1::2] = k
-
-        # latency prediction is calibrated by th cold start percentile
-        # cost prediction is calibrated by the sampled 95-tile
-        cons_params = np.array(self.cons_params).T
-        if self.bound_type == 'latency':
-            obj = self.objective(x, cons_params)
-            obj = np.percentile(obj, 100 * (1 - self.risk))
-            cons = self.constraint(x, self.obj_params, self.bound) + self.bound
-            return cons, obj
-        else:
-            obj = self.objective(x, self.obj_params)
-            cons = self.constraint(x, cons_params, self.bound)
-            cons = np.percentile(cons, 100 * (1 - self.risk)) + self.bound
-            return obj, cons
-
     '''
     The generic constraint satisfaction is deprecated due to the nondeterministic behavior of
     existing solvers for the logical control flow in the constraint function (e.g, if-else and 
@@ -430,3 +429,12 @@ class PCPSolver:
             num_samples == param_samples.shape[0]
         num_satisfied = np.sum(np.where(self.constraint(param_samples, x) <= self.bound, 1, 0))
         return num_satisfied - num_samples * (1 - self.approx_risk)
+
+
+if __name__ == '__main__':
+    num_stages = 8
+    risk = 0.05
+    approx_risk = 0
+    confidence_error = 0.01
+    sample_size = PCPSolver.sample_size(num_stages, risk, approx_risk, confidence_error)
+    print('sample size:', sample_size)

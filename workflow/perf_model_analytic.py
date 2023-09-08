@@ -32,6 +32,8 @@ class AnaPerfModel:
         self.write_params = None
         self.read_params = None
         self.comp_params = None
+
+        self.cold_params = None
         
     def update_allow_parallel(self, allow_parallel) -> None:
         assert isinstance(allow_parallel, bool)
@@ -69,6 +71,9 @@ class AnaPerfModel:
         read_arr = np.array(stage_profile['read'])[1:,:,0]
         comp_arr = np.array(stage_profile['compute'])[1:,:,0]
         write_arr = np.array(stage_profile['write'])[1:,:,0]
+
+        self.cold_params = np.array(stage_profile['cold'])[1:,:,0].reshape(-1)
+        self.cold_params = np.mean(self.cold_params)
         
         size2points_read = {}
         size2points_comp = {}
@@ -129,6 +134,53 @@ class AnaPerfModel:
         b = sum([self.read_params[1], self.comp_params[1], self.write_params[1]])
         
         return a, b
+
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=60):
+        a, b = self.get_params()
+        assert num_func > 0
+        return self.cold_params + a / num_func + b
+
+    def predict_tile(self, config, profile_path, num_samples, tile=95):
+        mem, num_func = config  # Note that the config should be in config_pairs
+        assert config in config_pairs
+        num_vcpu = mem / 1792
+        assert num_vcpu > 0 and num_vcpu <= 10
+        assert num_func > 0
+
+        with open(profile_path, 'r') as f:
+            profile = json.load(f)
+        assert isinstance(profile, dict) and self.stage_name in profile
+        stage_profile = profile[self.stage_name]
+        assert isinstance(stage_profile, dict) and 'cold' in stage_profile and \
+            'read' in stage_profile and 'compute' in stage_profile and \
+            'write' in stage_profile
+        y_s = np.array(stage_profile['cold'])
+        num_epochs = y_s.shape[0]
+        assert num_epochs >= 2
+        num_epochs -= 1  # Remove the first cold start epoch
+        y_s = y_s[1:][:,:,0]
+        y_r = np.array(stage_profile['read'])[1:][:,:,0]
+        y_c = np.array(stage_profile['compute'])[1:][:,:,0]
+        y_w = np.array(stage_profile['write'])[1:][:,:,0]
+
+        cfg_idx = config_pairs.index(config)
+
+        actuals = []
+        for i in range(num_epochs):
+            y = y_s[i][cfg_idx] + y_r[i][cfg_idx] + y_c[i][cfg_idx] + y_w[i][cfg_idx]
+            actuals.append(y)
+        actuals = np.array(actuals)
+        actual95 = np.percentile(actuals, 95)
+        actual50 = np.percentile(actuals, 50)
+
+        a, b = self.get_params()
+        assert num_func > 0
+        pred = self.cold_params + a / num_func + b
+
+        err95 = (pred - actual95) / actual95
+        err50 = (pred - actual50) / actual50
+        print('Predicted: %.2f, Actual95: %.2f, Actual50: %.2f, Err95: %.2f, Err50: %.2f' % \
+            (pred, actual95, actual50, err95, err50))
             
     def visualize(self, arr_x, arr_y, func, params):
         import matplotlib.pyplot as plt
