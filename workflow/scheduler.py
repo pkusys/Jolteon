@@ -365,6 +365,11 @@ class Orion(Caerus):
         self.workflow.update_workflow_config(memory_config, self.num_funcs)
         
     # Just BFS, but stop and return when one node is statisfied with the latency
+    # Because the priority search in Orion does not actively optimize the node resources
+    # on the branches when encountering fan out or fan in complex DAGs
+    # (as optimizing the node resources on branches does not reduce the overall latency),
+    # it leads to excessively long search times. Therefore, we did not use priority search
+    # (and we found that the results are almost the same whether we use priority search or not).
     def bestfit(self, latency, confidence):
         memory_grain = self.memory_grain
         config_list = [memory_grain for i in range(len(self.workflow.stages))]
