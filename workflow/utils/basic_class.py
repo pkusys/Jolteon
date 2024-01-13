@@ -1,6 +1,7 @@
 from multiprocessing import Process, Queue
 import threading
 import numpy as np
+import heapq
 
 class MyProcess(Process):
     def __init__(self, target, args, queue=None):
@@ -183,3 +184,28 @@ class Distribution:
     
     def __str__(self):
         return str(list(zip(self.data, self.prob)))
+
+class PriorityQueue:
+    def __init__(self):
+        self.heap = []
+
+    def push(self, item, priority):
+        heapq.heappush(self.heap, (-priority, item))
+
+    def pop(self):
+        if self.heap:
+            priority, item = heapq.heappop(self.heap)
+            return item, -priority
+        raise IndexError("pop from an empty priority queue")
+
+    def peek(self):
+        if self.heap:
+            priority, item = self.heap[0]
+            return -priority, item
+        raise IndexError("peek from an empty priority queue")
+
+    def is_empty(self):
+        return len(self.heap) == 0
+    
+    def __len__(self):
+        return len(self.heap)

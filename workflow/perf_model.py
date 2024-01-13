@@ -356,7 +356,7 @@ class StagePerfModel:
         
         print()
 
-    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=60) -> float:
+    def predict(self, num_vcpu, num_func, mode='latency', parent_d=0, cold_percent=60, input_size = 1024) -> float:
         # input_size uses MB as unit
         assert num_vcpu > 0 and num_vcpu <= 10
         assert num_func > 0
@@ -377,6 +377,8 @@ class StagePerfModel:
         
         params = self.params()
         pred = np.dot(params[1:], x)
+        if input_size != 1024:
+            pred *= input_size / self.default_input_size
         if mode == 'latency':
             pred += np.percentile(self.cold_params_avg, cold_percent)
             return pred
