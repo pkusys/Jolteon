@@ -17,7 +17,7 @@ This repository contains one version of the source code for our NSDI'24 paper "J
 - Hardware<br>
   - Register the function on AWS Lambda & Store data in AWS S3 & one c5.12xlarge EC2 instance for depolying Jolteon <br>
 - Software<br>
-  - Please refer to `repo/requirements.txt`.<br>
+  - Please refer to `repo/requirements.txt` and `repo/aws_setup.sh`.<br>
 
 ## 4. How to run<br>
 
