@@ -274,7 +274,7 @@ python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 -ss 10000 > tmp.log
 ## Performance model
 
 ### Workflow-level
-Video
+Video-Analytics
 ```
 python3 -u scheduler.py -w video -a 1 -r 0 -ss 2 > tmp.log
 
@@ -284,7 +284,7 @@ python3 -u scheduler.py -w video -s ditto -a 1 -r 0 > tmp.log
 ```
 
 ### Stage level
-Video, stage 0
+Video-Analytics, stage 0
 ```
 python3 -u scheduler.py -w video -as 1 -sid 0 -r 0 -ss 2 > tmp.log
 
@@ -293,8 +293,11 @@ python3 -u scheduler.py -w video -s orion -as 1 -sid 0 -r 0 > tmp.log
 python3 -u scheduler.py -w video -s ditto -as 1 -sid 0 -r 0 > tmp.log
 ```
 
+### Step level
+The data is collected from the log when running **Overall performance**.
+
 ## Sensitiveness
-Video
+Video-Analytics
 ```
 python3 -u scheduler.py -w video -bt latency -bv 12 -r 0 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 36 -r 0 > tmp.log
