@@ -206,32 +206,6 @@ python3 -u scheduler.py -w tpcds -bt cost -bv 2400 > tmp.log
 ```
 
 ## Overhead
-
-Scheduling time
-different workflows, different bound types
-```
-python3 -u scheduler.py -w ml -bt latency -bv 20 -r 0 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 30 -r 0 > tmp.log
-python3 -u scheduler.py -w ml -bt latency -bv 80 -r 0 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 800 -r 0 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 1600 -r 0 > tmp.log
-python3 -u scheduler.py -w ml -bt cost -bv 2500 -r 0 > tmp.log
-
-python3 -u scheduler.py -w video -bt latency -bv 12 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 30 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt latency -bv 80 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 920 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1300 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1800 -r 0 > tmp.log
-
-python3 -u scheduler.py -w tpcds -bt latency -bv 23 -r 0 > tmp.log
-python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 > tmp.log
-python3 -u scheduler.py -w tpcds -bt latency -bv 65 -r 0 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 1800 -r 0 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 1900 -r 0 > tmp.log
-python3 -u scheduler.py -w tpcds -bt cost -bv 2000 -r 0 > tmp.log
-```
-
 Time v.s. Sample size
 ```
 python3 -u scheduler.py -w tpcds -bt latency -bv 40 -r 0 -ss 10 > tmp.log
@@ -303,6 +277,3 @@ python3 -u scheduler.py -w video -bt latency -bv 12 -r 0 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 36 -r 0 > tmp.log
 python3 -u scheduler.py -w video -bt latency -bv 80 -r 0 > tmp.log
 ```
-<!-- python3 -u scheduler.py -w video -bt cost -bv 920 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1250 -r 0 > tmp.log
-python3 -u scheduler.py -w video -bt cost -bv 1720 -r 0 > tmp.log -->
